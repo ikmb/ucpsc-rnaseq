@@ -15,10 +15,13 @@ library(VennDiagram)
 library(extrafont)
 library(SCORPIUS)
 library(reshape2)
-
+library(viridis)
 library(ggrepel)
 library(ggvenn)
 source("functions.R")
+
+#import fonts:
+#font_import()
 
 projectdir <- dirname(getwd())
 

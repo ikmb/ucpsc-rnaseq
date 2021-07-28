@@ -1,5 +1,0 @@
-berry	number
-raspberry	4
-strawberry	14
-blueberry	6
-

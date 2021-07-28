@@ -77,6 +77,8 @@ CEMiwrapper <- function(expressionmatrix=assay(vsd), ID=metadata$SampleID, Group
 
 #NESclustering from CEMiTool file:
 NESheatmap <- function(CEMiToolfile=cem){
+  require(pheatmap)
+  require(viridis)
   NES <- t(as.matrix(CEMiToolfile@enrichment$nes[,-1]))
   NES[is.na(NES)] <- 0
   colnames(NES) <- CEMiToolfile@enrichment$nes[,1]
@@ -93,6 +95,7 @@ NESheatmap <- function(CEMiToolfile=cem){
     legend_breaks = c(-4, -2, 0, 2, 4, max(NES)),
     legend_labels= c("-4","-2","0","2","4", "NES\n")                    
   )
+  
   return(heatmap)
 }
 #running M3C clustering with only a subset of genes:
@@ -125,7 +128,7 @@ selectedgeneumap <- function(mydata = assay(vsd)[,metadata[,]$SampleID],
   if(is.null(shape)){
     p <- ggplot(data = scores, aes(x = X1, y = X2)) + 
       geom_point(aes(colour = labels), size = dotsize)+
-      theme_bw() + theme(legend.position="bottom",legend.spacing.x = unit(0.1,"mm"),legend.margin=ggplot2::margin(0,0,0,0),legend.box.margin=ggplot2::margin(0,0,0,0),text=element_text(family="Arial"),panel.grid.major = element_blank(),
+      theme_bw() + theme(legend.position="bottom",legend.spacing.x = unit(0.1,"mm"),legend.margin=ggplot2::margin(0,0,0,0),legend.box.margin=ggplot2::margin(0,0,0,0),text=element_text(),panel.grid.major = element_blank(),
                          panel.grid.minor = element_blank(), axis.text.y = element_text(size = axistextsize, 
                                                                                         colour = "black"), axis.text.x = element_text(size = axistextsize, 
                                                                                                                                       colour = "black"), axis.title.x = element_text(size = axistextsize), 
@@ -136,7 +139,7 @@ selectedgeneumap <- function(mydata = assay(vsd)[,metadata[,]$SampleID],
   else{
     p <- ggplot(data = scores, aes(x = X1, y = X2)) + 
       geom_point(aes(colour = labels, shape=shape), size = dotsize)+ scale_colour_manual(values = colvec) + scale_shape_manual(values=c(16,15,17,18,4,5,6,3,8,9,10,11,12,13,14,21,22,23,24,25),labels=paste0("C",unique(shape)))+
-      theme_bw() + theme(legend.position="bottom",legend.spacing.x = unit(0.1,"mm"),legend.margin=ggplot2::margin(0,0,0,0),legend.box.margin=ggplot2::margin(0,0,0,0),legend.direction = "horizontal", panel.grid.major = element_blank(), text=element_text(family="Arial"), 
+      theme_bw() + theme(legend.position="bottom",legend.spacing.x = unit(0.1,"mm"),legend.margin=ggplot2::margin(0,0,0,0),legend.box.margin=ggplot2::margin(0,0,0,0),legend.direction = "horizontal", panel.grid.major = element_blank(), text=element_text(), 
                          panel.grid.minor = element_blank(), axis.text.y = element_text(size = axistextsize, 
                                                                                         colour = "black"), axis.text.x = element_text(size = axistextsize, 
                                                                                                                                       colour = "black"), axis.title.x = element_text(size = axistextsize), 
@@ -175,7 +178,7 @@ ORAplot <- function(cemi=NULL, outputfile="ORAplot",filetype="png",... ){
   oratop5$Module <- ordered(oratop5$Module , levels = c(paste0("M",1:(nmodules(cemi)-1)),"Not.Correlated"))
   
   ORAplot <-ggplot(oratop5)+geom_bar(stat="identity",aes(y=ID, x=log10pvalue,alpha=alpha, fill=interaction(Module)))+theme_bw()+
-    theme(text=element_text(family="Arial", size = 12),legend.box.margin=ggplot2::margin(0,1,1,1), legend.text = element_text(size =12),
+    theme(text=element_text( size = 12),legend.box.margin=ggplot2::margin(0,1,1,1), legend.text = element_text(size =12),
           axis.text=element_text(size=12, colour = "black"),  legend.justification="left", legend.title=element_blank(),axis.title.y = element_blank(),axis.text.y=element_text(margin = margin(r = 10)),legend.position="bottom", legend.direction = "horizontal", legend.key.height = unit(0.1, "mm"), legend.margin=margin(0,0,0,0))+
     scale_alpha(range=c(0.4, 1), guide="none") +
     geom_vline(xintercept=-log10(0.05), colour="grey", linetype="dotted")+ 
@@ -482,7 +485,7 @@ severityspineplot <- function(){
     # theme(panel.spacing.x = unit(0, "npc")) + # if no spacing preferred between bars
     theme_bw() +ylab("Frequency")+labs(fill="Observed\nSeverity")+theme(legend.margin=ggplot2::margin(0,0,0,0),
                                                                         legend.box.margin=ggplot2::margin(0,-0,0,0),
-                                                                        legend.position="bottom",legend.key.height = unit(0.1, "mm"),panel.grid.major = element_blank(), text=element_text(family="Arial", size=6),legend.title=element_text(family="Arial", size=7), legend.text = element_text(family="Arial",size=7), 
+                                                                        legend.position="bottom",legend.key.height = unit(0.1, "mm"),panel.grid.major = element_blank(), text=element_text( size=6),legend.title=element_text( size=7), legend.text = element_text(size=7), 
                                                                         panel.grid.minor = element_blank(),axis.title.x = element_blank(), axis.title.y = element_blank())+ylab("Proportion")+scale_x_discrete(breaks=NULL)+scale_y_continuous(limits=c(0,1), expand=c(0,0))+guides(fill=guide_legend(label.position = "bottom",override.aes = list(size=.5)))
   #, "#F0F0EB"
   #RColorBrewer::brewer.pal(length(unique(metadata$supervised)),"YlOrRd")
