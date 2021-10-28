@@ -3,6 +3,7 @@ library(plyr)
 library(tidyverse)
 library(DESeq2)
 library(pheatmap)
+library(rvcheck)
 library(CEMiTool)
 library(M3C)
 library(rmarkdown)
@@ -117,6 +118,13 @@ ggsave(plot=MMVENN, filename=paste0(output_location,"/",cohortname,"_","MMVENN",
 MMGS <- Reduce(intersect,allsigngenes)
 MMGS
 fwrite(data.table(MMGS),file=paste0(output_location,"/","markergenes.txt"),col.names = FALSE)
+
+
+RFset <- list(RandomForestFeatureSelection(table=as.data.table(t(assay(vsd))),set_seed = 222,splittestratio=0.8, featuretablesize=50),
+              RandomForestFeatureSelection(table=as.data.table(t(assay(vsd))),set_seed = 223,splittestratio=0.8, featuretablesize=50),
+              RandomForestFeatureSelection(table=as.data.table(t(assay(vsd))),set_seed = 224,splittestratio=0.8, featuretablesize=50))
+
+
 
 RFGS <- as.vector(unlist(fread("rf50_with_seed.txt", header=F)))
 RFGS
@@ -248,24 +256,6 @@ pseudocorrelation[[geneset]]<- cor.test(as.numeric(dg$Supervised), dg$Pseudotime
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # lm_eqn <- function(df){
 #   m <- lm(y ~ x, df);
 #   eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
@@ -291,7 +281,7 @@ ggsave(plot=MarkerVenn, filename=paste0(output_location,"/",cohortname,"_","Mark
 
 
 #####celltypeblueprints#######
-bprint_expression<-fread("E-MTAB-3827-query-results.tpms.tsv")
+bprint_expression<-fread(paste0(dirname(getwd()),"/data_rescources/E-MTAB-3827-query-results.tpms.tsv"))
 bprint_expression_l<-pivot_longer(bprint_expression, 3:29, names_to = "cell_type", values_to = "TPM")%>%as.data.table()
 setnames(bprint_expression_l,c("gene_ID","gene_name","cell_type","TPM"))
 celltypes_to_keep<-c("mature neutrophil", "erythroblast", "conventional dendritic cell", "macrophage", "CD4-positive, alpha-beta T cell",
