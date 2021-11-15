@@ -1,20 +1,18 @@
+setwd(paste0("/ssdpool/ewacker/RNAseq","/01_R_session"))
+
 library(data.table)
 library(plyr)
 library(tidyverse)
 library(DESeq2)
-# library(pheatmap)
 library(rvcheck)
-# library(CEMiTool)
-# library(M3C)
+library(CEMiTool)
 library(rmarkdown)
 library(RColorBrewer)
 library(gridExtra)
 library(ggpubr)
 library(ggridges)
 library(ggplotify)
-# library(VennDiagram)
 library(extrafont)
-# library(SCORPIUS)
 library(reshape2)
 library(viridis)
 library(ggrepel)
@@ -27,9 +25,16 @@ library(InformationValue)
 source("functions.R")
 source("RandomForestfunction.R")
 
+remove_outlier_filter <- function(x=NULL){
+  calcedSD <- sd(x)
+  calcedmean <- mean(x)
+  booleanvector <- (x > (calcedmean - 3*calcedSD)) & (x < (calcedmean + 3*calcedSD))
+  return(booleanvector)
+}
 
-projectdir <- dirname(getwd())
-
+# projectdir <- dirname(getwd())
+projectdir <- "/ssdpool/ewacker/RNAseq"
+setwd(paste0("/ssdpool/ewacker/RNAseq","/01_R_session"))
 
 #####Inputs#####PSC
 corhorttablelocation <- paste0(projectdir,"/00_RawData/cohorts.csv")
@@ -51,7 +56,6 @@ PSC_rawcounts <- getrawcounts(corhorttablelocation=corhorttablelocation,cohortna
 PSC_rawcounts <- PSC_rawcounts[,colnames(PSC_rawcounts) %in% PSC_metadata$SampleID]
 UC_rawcounts <- getrawcounts(corhorttablelocation=corhorttablelocation,cohortname="Our")
 UC_metadata <- getmetadata(corhorttablelocation=corhorttablelocation,cohortname="Our")
-# UC_metadata$Diagnose
 
 
 SampleIDs <- c(colnames(PSC_rawcounts),colnames(UC_rawcounts))
@@ -60,63 +64,137 @@ intersectedgenes <- intersect(colnames(data.frame(t(PSC_rawcounts))), colnames(d
 merged_rawcounts <- merged_rawcounts[,..intersectedgenes]
 
 #Hard filtering to exclude zero expression in any sample genes:
-merged_rawcounts <- merged_rawcounts[,!(apply(merged_rawcounts == 0, 2, any)),with=FALSE]
+merged_rawcounts <- merged_rawcounts[,!(apply(merged_rawcounts <= 1, 2, any)),with=FALSE]
 
 
 merged_rawcounts <- t(merged_rawcounts)
-# rownames(merged_rawcounts)
 colnames(merged_rawcounts) <- SampleIDs
 
-
 merged_metadata <- rbind(PSC_metadata[,c("SampleID","Diagnose","PlateNr")],UC_metadata[,c("SampleID","Diagnose","PlateNr")])
-
-
-# dds <- DESeqDataSetFromMatrix(countData=merged_rawcounts, colData=merged_metadata, design= ~PlateNr + Diagnose)
-# mat <- merged_rawcounts
-# mm <- model.matrix(~Diagnose, colData(dds))
-# mat <- limma::removeBatchEffect(mat, batch=vsd$PlateNr, design=mm)
-# #mat <- sva::ComBat_seq(mat, batch=merged_metadata$PlateNr, group=as.factor(merged_metadata$Diagnose))
-# merged_rawcounts_debatched <- t(mat)
+merged_metadata$Cohort <- factor(c(rep(0,length(PSC_metadata$SampleID)),rep(1,length(UC_metadata$SampleID))))
 
 dds <- DESeqDataSetFromMatrix(countData=merged_rawcounts, colData=merged_metadata, design= ~Diagnose + PlateNr)
 dds <- DESeq(dds)
 #res <- results(dds,  contrast=c("Diagnose",Disease,"Control"))
 vsd <- vst(dds, blind=FALSE)
-# vsd <- rlog(dds, blind=FALSE)
 
-mat <- assay(vsd)
-mm <- model.matrix(~Diagnose, colData(vsd))
-mat <- limma::removeBatchEffect(mat, batch=vsd$PlateNr, batch2=c(rep(0,length(PSC_metadata$SampleID)),rep(1,length(UC_metadata$SampleID))), design=mm)
-#mat <- sva::ComBat_seq(mat, batch=vsd$PlateNr, group=as.factor(merged_metadata$Diagnose))
-merged_vst_counts <- t(mat)
-
-merged_vst_counts <- t(assay(vsd))
-merged_vst_counts <- as.data.table(merged_vst_counts)
-merged_vst_counts <- as.data.table(sapply(merged_vst_counts, as.numeric))
-
-merged_controls <- ifelse(merged_metadata$Diagnose == "Control",TRUE,FALSE)
-merged_z_con_stabilised <- data.table(apply(merged_vst_counts[,],2,function(x){x-median(x[merged_controls])}),keep.rownames=TRUE)
+#merged_vst_counts <- t(assay(vsd))
+merged_vst_counts <- as.data.table(sapply(data.table(assay(vsd)), as.numeric))
+#merged_controls <- ifelse(merged_metadata$Diagnose == "Control",TRUE,FALSE)
 
 
-# ggplot(merged_vst_counts)+geom_boxplot(aes(x=merged_metadata$Diagnose,y=S100A12))
-# ggplot(merged_z_con_stabilised)+geom_boxplot(aes(x=merged_metadata$Diagnose,y=S100A12))
+##### Validation VST-Data
+test_vst_counts <- as.data.table(t(merged_vst_counts))
+colnames(test_vst_counts) <- rownames(assay(vsd))
+rownames(test_vst_counts) <- SampleIDs
+ggplot(test_vst_counts)+geom_jitter(aes(x=merged_metadata$Diagnose,y=HIF1A))+facet_wrap(~merged_metadata$Cohort)
+#####
+
+merged_controls_PSC <- ifelse(merged_metadata[grepl("^I",merged_metadata$SampleID)]$Diagnose == "Control",TRUE,FALSE)
+merged_controls_UC <- ifelse(merged_metadata[grepl("^DE",merged_metadata$SampleID)]$Diagnose == "Control",TRUE,FALSE)
+
+
+#merged_z_con_stabilised <- data.table(apply(merged_vst_counts,1,function(x){(x-mean(x[merged_controls_PSC]))/sd(x[merged_controls_PSC])}),keep.rownames=TRUE)
+
+# PSC_z_con_stabilised <- data.table(apply(merged_vst_counts[,grepl("^I",colnames(merged_vst_counts)),with=FALSE],
+#                                             1,function(x){
+#                                               (x-mean(x[merged_controls_PSC]))/sd(x[merged_controls_PSC])}),
+#                                       keep.rownames=TRUE)
+
+PSC_z_con_stabilised <- data.table(apply(merged_vst_counts[,grepl("^I",colnames(merged_vst_counts)),with=FALSE],
+                                         1,function(x){y <- x[merged_controls_PSC];z <- y[remove_outlier_filter(y)];
+                                         (x-mean(y))/sd(z)}),
+                                   keep.rownames=TRUE)
+
+# UC_z_con_stabilised <- data.table(apply(merged_vst_counts[,grepl("^DE",colnames(merged_vst_counts)),with=FALSE],
+#                                          1,function(x){
+#                                            (x-mean(x[merged_controls_UC]))/sd(x[merged_controls_UC])}),
+#                                    keep.rownames=TRUE)
+
+UC_z_con_stabilised <- data.table(apply(merged_vst_counts[,grepl("^DE",colnames(merged_vst_counts)),with=FALSE],
+                                        1,function(x){y <- x[merged_controls_UC];z <- y[remove_outlier_filter(y)];
+                                        (x-mean(y))/sd(z)}),
+                                  keep.rownames=TRUE)
+
+merged_z_con_stabilised <- rbindlist(list(PSC_z_con_stabilised,UC_z_con_stabilised))
+colnames(merged_z_con_stabilised) <- c("rn",rownames(assay(vsd)))
+
 
 
 merged_RF <- data.table(merged_z_con_stabilised, Diagnose=merged_metadata$Diagnose, Cohort=c(rep(0,length(PSC_metadata$SampleID)),rep(1,length(UC_metadata$SampleID))))
+ggplot(merged_RF[Diagnose == "Control",])+geom_jitter(aes(x=Cohort, y=MYL12A))
+
+
+
+
+
+#merged_z_con_stabilised <- as.data.table(sapply(merged_z_con_stabilised, as.numeric))
+
+
+# merged_z_con_stabilised[450,merged_controls, with=FALSE]%>%unlist()%>%mean()
+# ggplot(merged_z_con_stabilised)+geom_jitter(aes(x=vsd$Cohort,y=unlist(merged_z_con_stabilised[55,]),height=0))
+
+
+
+
+# mat <- as.matrix(merged_z_con_stabilised[,-1])
+# #rownames(mat) <- rownames(assay(vsd))
+# # mat <- assay(vsd)
+# mat <- t(mat)
+# mm <- model.matrix(~Diagnose, colData(vsd))
+# mat <- sva::ComBat(mat, batch=vsd$Cohort, mod=mm)#, group=as.factor(merged_metadata$Diagnose
+# #mat <- limma::removeBatchEffect(mat, batch=vsd$PlateNr, design=mm)#, batch2=c(rep(0,length(PSC_metadata$SampleID)),rep(1,length(UC_metadata$SampleID)))
+# merged_vst_counts_batched <- t(mat)
+# merged_vst_counts_batched <- as.data.table(merged_vst_counts_batched)
+
+
+# ggplot(merged_vst_counts)+geom_boxplot(aes(x=merged_metadata$Cohort,y=S100A12))
+# ggplot(merged_z_con_stabilised)+geom_boxplot(aes(x=merged_metadata$Diagnose,y=S100A12))
+
+
+#scaled_obj <- scale(merged_RF[Cohort==0,-c("Cohort","Diagnose")],center=FALSE)
+
+
+
+
+# merged_RF <- data.table(merged_vst_counts_batched, Diagnose=merged_metadata$Diagnose, Cohort=c(rep(0,length(PSC_metadata$SampleID)),rep(1,length(UC_metadata$SampleID))))
+# 
+# merged_RF_scaled <- data.table(rbindlist(list(data.table(scale(as.matrix(merged_RF[Cohort==0,-c("Cohort","Diagnose")]),center=FALSE)),
+#                                     data.table(scale(as.matrix(merged_RF[Cohort==1,-c("Cohort","Diagnose")]),center=FALSE)))),
+#                                     Cohort=merged_RF$Cohort,Diagnose=merged_RF$Diagnose)
+# 
+# 
+# ggplot(merged_RF_scaled[Diagnose=="Control",])+geom_jitter(aes(x=Cohort, y=ZFP36L2))
+# ggplot(merged_RF_scaled[Diagnose!="Control",])+geom_jitter(aes(x=Cohort, y=ZFP36L2))
+# ggplot(merged_RF_scaled)+geom_jitter(aes(x=Cohort, y=ZFP36L2))
+# sd(merged_RF_scaled[Diagnose=="Control"&Cohort==0,ZFP36L2])
+# sd(merged_RF_scaled[Diagnose=="Control"&Cohort==1,ZFP36L2])
+# sd(merged_RF_scaled[Diagnose=="Control"&Cohort==0,ZFP36L2])
+# sd(merged_RF_scaled[Diagnose=="Control"&Cohort==1,ZFP36L2])
+# sd(merged_RF_scaled[Cohort==0,ZFP36L2])
+# sd(merged_RF_scaled[Cohort==1,ZFP36L2])
+# merged_RF[Cohort==1,-c("Cohort","Diagnose")]
+
+
 merged_RF$Diagnose  <- factor(merged_RF$Diagnose )
 merged_RF$Cohort  <- factor(merged_RF$Cohort )
 levels(merged_RF$Diagnose) <- c("0","1","2")
 
 
-seednr <- 22505
+seednr <- 5495
 set.seed(seednr)
-splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose == 0,-"Diagnose"], 0.5)
+splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose == 0,-c("rn","Diagnose","DiagnoseCohort")], 0.5)
 rftrain <- training(splitted)
 rftest <- testing(splitted)
+
+# rftrain$Cohort <- droplevels(as.factor(rftrain$Cohort))
+# rftest$Cohort <- droplevels(as.factor(rftest$Cohort))
 
 
 # rftrain$Diagnose <- droplevels(as.factor(rftrain$Diagnose))
 # rftest$Diagnose <- droplevels(as.factor(rftest$Diagnose))
+
+####COHORT####
 
 rfmodel <- ranger(
   formula         = Cohort ~ ., 
@@ -132,9 +210,9 @@ predicted <- as.data.table(predictedmodel$predictions)[,2]%>%unlist()%>%as.vecto
 # predicted <- predictions(predictedmodel,type="response")
 # predicted<-colnames(predicted)[apply(predicted,1,which.max)]
 # table(predicted,rftest$Diagnose)
-#compare uc to others
+# #compare uc to others
 # predicted[predicted=="2"] <- "0"
-#evaluate
+# #evaluate
 optCutOff <- optimalCutoff(rftest[["Cohort"]], predicted, optimiseFor = "Both")[1]
 
 misClassErrorResult <- misClassError(rftest[["Cohort"]], predicted, threshold = optCutOff)
@@ -152,159 +230,80 @@ head(variable_importance[order(variable_importance$importance, decreasing=T),],2
 
 mostimpactfeature <- variable_importance[variable_importance$importance==max(variable_importance$importance),feature]
 
-
-ggplot(merged_RF[merged_RF$Diagnose == 0,])+geom_jitter(aes(x=Cohort,y=BDP1),height=0)
-
+ggplot(merged_RF[merged_RF$Diagnose ==0,])+geom_jitter(aes(x=Cohort,y=PABPC1),height=0)
 
 
 
+#####DIAGNOSE####
+
+merged_RF[merged_RF$Diagnose == 0 & merged_RF$Cohort ==0,DiagnoseCohort:=0]
+merged_RF[merged_RF$Diagnose == 0 & merged_RF$Cohort ==1,DiagnoseCohort:=1]
+merged_RF[merged_RF$Diagnose == 1 & merged_RF$Cohort ==0,DiagnoseCohort:=2]
+merged_RF[merged_RF$Diagnose == 2 & merged_RF$Cohort ==1,DiagnoseCohort:=3]
+merged_RF$DiagnoseCohort <- factor(merged_RF$DiagnoseCohort)
+#levels(rftest$DiagnoseCohort) <- c("0","1","1")
+# table(merged_RF$Diagnose, merged_RF$DiagnoseCohort)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#######END#######
-
-
-
-
-
-# PSC_vsd <- getnormalizedDESeq2object(corhorttablelocation=corhorttablelocation,cohortname="PSC")
-# PSC_vst_counts <- t(assay(PSC_vsd))
-# PSC_vst_counts <- as.data.table(PSC_vst_counts, keep.rownames = TRUE)
-# PSC_vst_counts <- PSC_vst_counts[PSC_vst_counts$rn %in% PSC_metadata$SampleID,]
-# ggplot(PSC_vst_counts)+geom_boxplot(aes(x=PSC_metadata$Diagnose,y=S100A12))
-# 
-# PSCcontrols <- ifelse(PSC_metadata$Diagnose == "Control",TRUE,FALSE)
-# PSC_z_con_stabilised <- data.table(apply(PSC_vst_counts[,-"rn"],2,function(x){x-median(x[PSCcontrols])}),keep.rownames=TRUE)
-# ggplot(PSC_z_con_stabilised)+geom_boxplot(aes(x=PSC_metadata$Diagnose,y=S100A12))
-# 
-# # merged_RF <- data.table(PSC_z_con_stabilised, Diagnose=PSC_metadata$Diagnose)
-# 
-# 
-# 
-# #####Inputs#####UC
-# corhorttablelocation <- paste0(projectdir,"/00_RawData/cohorts.csv")
-# cohorttable <- fread(corhorttablelocation, header=T)
-# cohortname <- "Our"
-# Disease <- unlist(cohorttable[Cohort %in% cohortname, 5])
-# 
-# gmt_file <- paste0(projectdir,"/data_rescources/GO_Biological_Process_2018.gmt")
-# output_location <- paste0("output")
-# 
-# UC_rawcounts <- getrawcounts(corhorttablelocation=corhorttablelocation,cohortname="Our")
-# UC_metadata <- getmetadata(corhorttablelocation=corhorttablelocation,cohortname="Our")
-# UC_vsd <- getnormalizedDESeq2object(corhorttablelocation=corhorttablelocation,cohortname="Our")
-# UC_vst_counts <- t(assay(UC_vsd))
-# UC_vst_counts <- as.data.table(UC_vst_counts, keep.rownames = TRUE)
-# UC_vst_counts <- UC_vst_counts[UC_vst_counts$rn %in% UC_metadata$SampleID,]
-# UCcontrols <- ifelse(UC_metadata$Diagnose == "Control",TRUE,FALSE)
-# #UC_z_con_stabilised <- data.table(apply(assay(UC_vsd),2,function(x){x-median(x)}),keep.rownames=TRUE)
-# UC_z_con_stabilised <- data.table(apply(UC_vst_counts[,-"rn"],2,function(x){x-median(x[UCcontrols])}),keep.rownames=TRUE)
-# 
-# ggplot(UC_vst_counts)+geom_boxplot(aes(x=UC_metadata$Diagnose,y=S100A12))
-# ggplot(UC_z_con_stabilised)+geom_boxplot(aes(x=UC_metadata$Diagnose,y=S100A12))
-# 
-# # merged_RF <- data.table(UC_z_con_stabilised, Diagnose=UC_metadata$Diagnose)
-# 
-# 
-# 
-# merged_RF <- rbindlist(list(PSC_z_con_stabilised, UC_z_con_stabilised),fill=TRUE, idcol = TRUE)
-# 
-# intersectedgenes <- intersect(colnames(UC_z_con_stabilised), colnames(PSC_z_con_stabilised))
-# 
-# merged_RF <- merged_RF[,c(intersectedgenes,".id"),with=FALSE]
-
-merged_RF$Diagnose <- c(PSC_metadata$Diagnose,UC_metadata$Diagnose)
-merged_RF$Diagnose  <- factor(merged_RF$Diagnose )
-levels(merged_RF$Diagnose) <- c("0","1","2")
-
-merged_RF$.id <- factor(merged_RF$.id)
-
-# UCcontrols <- !as.logical(as.integer(UC_vsd$Diagnose)-1)
-# UC_z_con_stabilised <- data.table(apply(assay(UC_vsd),2,function(x){x-median(x)}),keep.rownames=TRUE)
-# PSCcontrols <- ifelse(PSC_vsd[,PSC_vsd$Diagnose %in% c("PSC","Control")]$Diagnose == "Control",TRUE,FALSE)
-# PSC_z_con_stabilised <- data.table(apply(assay(PSC_vsd)[,PSC_vsd$Diagnose %in% c("PSC","Control")],2,function(x){x-median(x)}),keep.rownames=TRUE)
-
-
-
-
-#View(data.table(colnames(assay(PSC_vsd)[,PSC_vsd$Diagnose %in% c("PSC","Control")]),ifelse(PSC_vsd[,PSC_vsd$Diagnose %in% c("PSC","Control")]$Diagnose == "Control",TRUE,FALSE),PSC_vsd[,PSC_vsd$Diagnose %in% c("PSC","Control")]$Diagnose))
-
-# merged_z_con_stabilised <- merge(UC_z_con_stabilised,PSC_z_con_stabilised,by="rn")
-# merged_metadata <- data.table(rbind(PSC_metadata[PSC_metadata$Diagnose %in% c("PSC","Control"),c("SampleID","Diagnose")],UC_metadata[,c("SampleID","Diagnose")]))
-# 
-# transposed_merged_z_con_stabilised <- t(merged_z_con_stabilised)
-# transposed_merged_z_con_stabilised <- as.data.table(transposed_merged_z_con_stabilised)
-# colnames(transposed_merged_z_con_stabilised) <- unlist(transposed_merged_z_con_stabilised[1,])
-# transposed_merged_z_con_stabilised <- transposed_merged_z_con_stabilised[-1,]
-# 
-# merged_RF <- data.table(as.data.table(sapply(transposed_merged_z_con_stabilised, as.numeric)), Diagnose=merged_metadata$Diagnose)
-# merged_RF$Diagnose <- factor(merged_RF$Diagnose)
-# levels(merged_RF$Diagnose) <- c("0", "1")
-levels(merged_RF$.id) <- c("0","1")
-
-
-seednr <- 223
+seednr <- 22505
 set.seed(seednr)
-splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose == 0,-"Diagnose"], 0.5)
+splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose %in% c("1","2"),-c("Cohort","Diagnose","rn")], 0.5)
 rftrain <- training(splitted)
 rftest <- testing(splitted)
+# levels(rftrain$Diagnose) <- c("0","1","1")
+# levels(rftest$Diagnose) <- c("0","1","1")
+#rftest$DiagnoseCohort <- factor(rftest$DiagnoseCohort)
 
-rftrain$Diagnose <- droplevels(as.factor(rftrain$Diagnose))
-rftest$Diagnose <- droplevels(as.factor(rftest$Diagnose))
+#case.weights calculation
+training_sample_weights <- case_when(rftrain$DiagnoseCohort == "0" ~ 1/sum(rftrain$DiagnoseCohort=="0"),
+                                     rftrain$DiagnoseCohort == "1" ~ 1/sum(rftrain$DiagnoseCohort=="1"),
+                                     rftrain$DiagnoseCohort == "2" ~ 1/sum(rftrain$DiagnoseCohort=="2"),
+                                     rftrain$DiagnoseCohort == "3" ~ 1/sum(rftrain$DiagnoseCohort=="3"))
 
 rfmodel <- ranger(
-  formula         = .id ~ ., 
-  data            = rftrain[,c("SGIP1",".id")], 
-  num.trees       = 100,
+  formula         = DiagnoseCohort ~ ., 
+  data            = rftrain, 
+  num.trees       = 10000,
   seed            = seednr,
   probability     = TRUE,
-  importance      = 'impurity'
+  importance      = 'impurity',
+  classification = TRUE,
+  #class.weights = c(1/45,1/114,1/108,1/256),
+  case.weights = training_sample_weights
 )
 
- ggplot(data=rftrain[,c("SGIP1",".id")])+geom_jitter(aes(x=.id,y=SGIP1))
- ggplot(data=rftest[,c("SGIP1",".id")])+geom_jitter(aes(x=.id,y=SGIP1))
 predictedmodel <- predict(rfmodel, rftest, type="response")
 #predicted <- as.data.table(predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
 predicted <- predictions(predictedmodel,type="response")
-# predicted<-colnames(predicted)[apply(predicted,1,which.max)]
-# table(predicted,rftest$Diagnose)
+
+# colnames(predicted) <- c("0","1","2","3")
+colnames(predicted) <- c("1","2","3")
+predicted<-colnames(predicted)[apply(predicted,1,which.max)]
+table(predicted,rftest$DiagnoseCohort)
 #compare uc to others
 # predicted[predicted=="2"] <- "0"
 #evaluate
-optCutOff <- optimalCutoff(rftest[[".id"]], predicted, optimiseFor = "Both")[1]
+optCutOff <- optimalCutoff(rftest[["DiagnoseCohort"]], predicted, optimiseFor = "Both")[1]
 
-misClassErrorResult <- misClassError(rftest[[".id"]], predicted, threshold = optCutOff)
+misClassErrorResult <- misClassError(rftest[["DiagnoseCohort"]], predicted)#, threshold = optCutOff)
 
-ROCplotResult <- plotROC(rftest[[".id"]], predicted, returnSensitivityMat=T)
+ROCplotResult <- plotROC(rftest[["DiagnoseCohort"]], predicted, returnSensitivityMat=T)
 
 
-concordanceResult <- Concordance(rftest[["Diagnose"]], predicted)
-sensitivityResult <- sensitivity(rftest[["Diagnose"]], predicted, threshold = optCutOff)
-specificityResult <- specificity(rftest[["Diagnose"]], predicted, threshold = optCutOff)
-confusionMatrixResult <- confusionMatrix(rftest[["Diagnose"]], predicted, threshold = optCutOff)
-
+concordanceResult <- Concordance(rftest[["DiagnoseCohort"]], predicted)
+sensitivityResult <- sensitivity(rftest[["DiagnoseCohort"]], predicted, threshold = optCutOff)
+specificityResult <- specificity(rftest[["DiagnoseCohort"]], predicted, threshold = optCutOff)
+confusionMatrixResult <- confusionMatrix(rftest[["DiagnoseCohort"]], predicted, threshold = optCutOff)
+confusionMatrixResult
 variable_importance <- data.table(feature=names(rfmodel$variable.importance), importance=rfmodel$variable.importance)
 head(variable_importance[order(variable_importance$importance, decreasing=T),],25)
 
 mostimpactfeature <- variable_importance[variable_importance$importance==max(variable_importance$importance),feature]
+
+ggplot(merged_RF)+geom_jitter(aes(x=DiagnoseCohort,y=HIF1A),height=0)
+
+grep("HIF1A",rownames(assay(vsd)))
+
+ggplot(test_vst_counts)+geom_jitter(aes(x=merged_metadata$Diagnose,y=HIF1A))+facet_wrap(~merged_metadata$Cohort)
+

@@ -1,6 +1,3 @@
-
-
-
 RandomForestFeatureSelection <- function(table=NULL,set_seed=123, splittestratio=0.5,featuretablesize=50){
 library(data.table)
 library(rsample)      # data splitting 
@@ -70,22 +67,22 @@ variable_importance <- data.table(feature=names(rfmodel$variable.importance), im
 return_features <- head(variable_importance[order(variable_importance$importance, decreasing=T),],featuretablesize)
 return(return_features)
 }
-
-mostimpactfeature <- variable_importance[variable_importance$importance==max(variable_importance$importance),feature]
-
-#t.test(normalisedtable[,variable_importance[variable_importance$importance==max(variable_importance$importance),taxa],with=F],normalisedtable$UCpositive)
-
-
-ggplot(normalisedtable, aes(x=UCpositive,y=ZFP36L2,fill=as.factor(UCpositive)))+geom_boxplot()+geom_dotplot(binaxis="y",stackdir = "center",dotsize=0.1,binwidth = 1/100) + scale_y_continuous(trans="log1p")
-
-confusionMatrixResult
-#list(model=rfmodel, misClassErrorResult=misClassErrorResult,ROCplotResult=ROCplotResult, concordanceResult=concordanceResult, sensitivityResult=sensitivityResult, specificityResult=specificityResult, confusionMatrixResult=confusionMatrixResult)
-
-
-
-
-
-
-# vsd_validation$severity <- vsd_validation$endoscopic_mayo
-# vsd_validation$supervised <- vsd_validation$endoscopic_mayo
-# vsd_validation$severity <- ordered(replace(vsd_validation$supervised, vsd_validation$supervised%in%NA,"Control"), levels=c("Control","0","1","2","3"))
+# 
+# mostimpactfeature <- variable_importance[variable_importance$importance==max(variable_importance$importance),feature]
+# 
+# #t.test(normalisedtable[,variable_importance[variable_importance$importance==max(variable_importance$importance),taxa],with=F],normalisedtable$UCpositive)
+# 
+# 
+# ggplot(normalisedtable, aes(x=UCpositive,y=ZFP36L2,fill=as.factor(UCpositive)))+geom_boxplot()+geom_dotplot(binaxis="y",stackdir = "center",dotsize=0.1,binwidth = 1/100) + scale_y_continuous(trans="log1p")
+# 
+# confusionMatrixResult
+# #list(model=rfmodel, misClassErrorResult=misClassErrorResult,ROCplotResult=ROCplotResult, concordanceResult=concordanceResult, sensitivityResult=sensitivityResult, specificityResult=specificityResult, confusionMatrixResult=confusionMatrixResult)
+# 
+# 
+# 
+# 
+# 
+# 
+# # vsd_validation$severity <- vsd_validation$endoscopic_mayo
+# # vsd_validation$supervised <- vsd_validation$endoscopic_mayo
+# # vsd_validation$severity <- ordered(replace(vsd_validation$supervised, vsd_validation$supervised%in%NA,"Control"), levels=c("Control","0","1","2","3"))

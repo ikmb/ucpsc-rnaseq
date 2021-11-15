@@ -218,7 +218,8 @@ combinedNESheatmap <- function(cem1=cemDiagnose, cem2=cemim3c, groupnameforcem2=
     ggsave(plot=heatmap, filename=paste0(output_location,"/",outputfile,".",filetype),dpi=400,width = 120, height = 120, units = "mm", device=filetype)
     return(heatmap)
   }else{print("Error: Modules are not identical")}}
-getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname="Our"){
+
+getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
   require(data.table)
   cohorttable <- fread(corhorttablelocation, header=T)
   #cohorttable <- fread("/home/sukmb465/Documents/Eike/Nextflow/cohorts-nextflow2/cohorts/cohorts.csv", header=T)
@@ -233,6 +234,7 @@ getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/0
   
   colnames(UC) <- gsub("_1Aligned.sortedByCoord.out.bam","",colnames(UC))
   colnames(UC) <- gsub("Aligned.sortedByCoord.out.bam","",colnames(UC))
+  colnames(UC) <- gsub("\\-L1_S[0-9]+_L00[0-9]_R1_001$","",colnames(UC))
   
   #countmatrix:
   if(colnames(UC)[1] %in% "Geneid"){UC <- UC[,-1]}
@@ -246,7 +248,7 @@ getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/0
   #readin metadata  
   metadata <- fread(paste0(projectdir,"/00_RawData/",metatable), header=metatableheader)
   #Diagnose must be "UC" or "Control for every sample
-  colnames(metadata) <- c("SampleID", "Diagnose", colnames(metadata)[-1:-2])
+  #colnames(metadata) <- c("SampleID", "Diagnose", colnames(metadata)[-1:-2])
   
   #globin genes removal:
   countmatrix <- countmatrix[!(row.names(countmatrix) %in%  c("HBA1","HBA2","HBB","HBD","HBE1","HBG1","HBG2","HBM","HBQ1","HBZ")),]
@@ -259,12 +261,15 @@ getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/0
   #filtering to 10 counts per gene in at least 10% of samples
   countmatrix <- countmatrix[as.vector(rowSums(countmatrix>10)>(dim(countmatrix)[2]/10)),]
   
+  metadata$PlateNr <- factor(metadata$PlateNr)
+  metadata$Diagnose <- factor(metadata$Diagnose)
+  
   library(DESeq2)
   dds <- DESeqDataSetFromMatrix(countData=countmatrix, colData=metadata, design= ~PlateNr + Diagnose)
   dds <- DESeq(dds)
   #DESeqperformed <- TRUE
   #vsde <- vst(dds, blind=FALSE)
-  res <- results(dds,  contrast=c("Diagnose",Disease,"Control"))
+  #res <- results(dds,  contrast=c("Diagnose",Disease,"Control"))
   vsd <- vst(dds, blind=FALSE)
   return(vsd)
 }
@@ -283,7 +288,7 @@ getrawcounts <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/coh
   
   colnames(UC) <- gsub("_1Aligned.sortedByCoord.out.bam","",colnames(UC))
   colnames(UC) <- gsub("Aligned.sortedByCoord.out.bam","",colnames(UC))
-  
+  colnames(UC) <- gsub("\\-L1_S[0-9]+_L00[0-9]_R1_001$","",colnames(UC))
   #countmatrix:
   if(colnames(UC)[1] %in% "Geneid"){UC <- UC[,-1]}
   countmatrix <- data.matrix(UC[,-1])
@@ -326,7 +331,7 @@ getmetadata <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/coho
   
   colnames(UC) <- gsub("_1Aligned.sortedByCoord.out.bam","",colnames(UC))
   colnames(UC) <- gsub("Aligned.sortedByCoord.out.bam","",colnames(UC))
-  
+  colnames(UC) <- gsub("\\-L1_S[0-9]+_L00[0-9]_R1_001$","",colnames(UC))
   #countmatrix:
   if(colnames(UC)[1] %in% "Geneid"){UC <- UC[,-1]}
   countmatrix <- data.matrix(UC[,-1])
@@ -339,7 +344,7 @@ getmetadata <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/coho
   #readin metadata  
   metadata <- fread(paste0(projectdir,"/00_RawData/",metatable), header=metatableheader)
   #Diagnose must be "UC" or "Control for every sample
-  colnames(metadata) <- c("SampleID", "Diagnose", colnames(metadata)[-1:-2])
+  #colnames(metadata) <- c("SampleID", "Diagnose", colnames(metadata)[-1:-2])
   
   #globin genes removal:
   countmatrix <- countmatrix[!(row.names(countmatrix) %in%  c("HBA1","HBA2","HBB","HBD","HBE1","HBG1","HBG2","HBM","HBQ1","HBZ")),]
