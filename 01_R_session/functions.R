@@ -498,8 +498,8 @@ severityspineplot <- function(){
   return(mosaicplot)
 }
 
-getCohortsVSD <- function(corhorttablelocation="/home/sukmb465/Documents/Eike/Nextflow/cohorts-nextflow2/cohorts/cohorts.csv",cohortname="Our"){
-  library(data.table)
+getCohortsVSD <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
+  require(data.table)
   cohorttable <- fread(corhorttablelocation, header=T)
   #cohorttable <- fread("/home/sukmb465/Documents/Eike/Nextflow/cohorts-nextflow2/cohorts/cohorts.csv", header=T)
   #cohortname <- "Our"
@@ -509,8 +509,8 @@ getCohortsVSD <- function(corhorttablelocation="/home/sukmb465/Documents/Eike/Ne
   metatable <- unlist(cohorttable[Cohort %in% cohortname,3])
   metatableheader <- as.logical(unlist(cohorttable[Cohort %in% cohortname,4]))
   Disease <- as.vector(unlist(cohorttable[Cohort %in% cohortname, 5]))
-  UC <- fread(file=counttable)
-  
+  UC <- fread(file= paste0(projectdir,"/00_RawData/",counttable))
+ 
   colnames(UC) <- gsub("_1Aligned.sortedByCoord.out.bam","",colnames(UC))
   colnames(UC) <- gsub("Aligned.sortedByCoord.out.bam","",colnames(UC))
   
@@ -524,7 +524,7 @@ getCohortsVSD <- function(corhorttablelocation="/home/sukmb465/Documents/Eike/Ne
   rm(UC)
   
   #readin metadata  
-  metadata <- fread(metatable, header=metatableheader)
+  metadata <- fread(paste0(projectdir,"/00_RawData/",metatable), header=metatableheader)
   #Diagnose must be "UC" or "Control for every sample
   colnames(metadata) <- c("SampleID", "Diagnose", colnames(metadata)[-1:-2])
   
@@ -585,7 +585,7 @@ getCohortsVSD <- function(corhorttablelocation="/home/sukmb465/Documents/Eike/Ne
   return(vsd)
 }
 
-getCohortsDDS <- function(corhorttablelocation="/home/sukmb465/Documents/Eike/Nextflow/cohorts-nextflow2/cohorts/cohorts.csv",cohortname="Our"){
+getCohortsDDS <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
   library(data.table)
   cohorttable <- fread(corhorttablelocation, header=T)
   #cohorttable <- fread("/home/sukmb465/Documents/Eike/Nextflow/cohorts-nextflow2/cohorts/cohorts.csv", header=T)
@@ -596,7 +596,7 @@ getCohortsDDS <- function(corhorttablelocation="/home/sukmb465/Documents/Eike/Ne
   metatable <- unlist(cohorttable[Cohort %in% cohortname,3])
   metatableheader <- as.logical(unlist(cohorttable[Cohort %in% cohortname,4]))
   Disease <- as.vector(unlist(cohorttable[Cohort %in% cohortname, 5]))
-  UC <- fread(file=counttable)
+  UC <- fread(file= paste0(projectdir,"/00_RawData/",counttable))
   
   colnames(UC) <- gsub("_1Aligned.sortedByCoord.out.bam","",colnames(UC))
   colnames(UC) <- gsub("Aligned.sortedByCoord.out.bam","",colnames(UC))
@@ -611,7 +611,7 @@ getCohortsDDS <- function(corhorttablelocation="/home/sukmb465/Documents/Eike/Ne
   rm(UC)
   
   #readin metadata  
-  metadata <- fread(metatable, header=metatableheader)
+  metadata <- fread(paste0(projectdir,"/00_RawData/",metatable), header=metatableheader)
   #Diagnose must be "UC" or "Control for every sample
   colnames(metadata) <- c("SampleID", "Diagnose", colnames(metadata)[-1:-2])
   
