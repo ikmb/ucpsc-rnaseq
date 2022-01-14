@@ -29,31 +29,31 @@ validationcohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
 cortestlist <- list()
 k <- 1
 for (cohort in names(validationcohorts)){
-  vsd <- getCohortsVSD(cohortname = cohort)
+  vsd_validation <- getCohortsVSD(cohortname = cohort)
   cohortname <- cohort
   severityscale <- validationcohorts[[cohort]]
   
     if (cohortname=="Planell"){
-      vsd$severity <- vsd$endoscopic_mayo
-      vsd$supervised <- vsd$endoscopic_mayo
-      vsd$severity <- ordered(replace(vsd$supervised, vsd$supervised%in%NA,"Control"), levels=c("Control","0","1","2","3"))
+      vsd_validation$severity <- vsd_validation$endoscopic_mayo
+      vsd_validation$supervised <- vsd_validation$endoscopic_mayo
+      vsd_validation$severity <- ordered(replace(vsd_validation$supervised, vsd_validation$supervised%in%NA,"Control"), levels=c("Control","0","1","2","3"))
       #plotcolors <- c("#00AFBB", rep("#E7B800",times=2), rep("#FC4E07", times=2))
-      plotcolors <- RColorBrewer::brewer.pal(length(levels(vsd$severity)),"Set2")
-      MyPalette <-setNames(plotcolors,as.list(levels(vsd$severity)))
+      plotcolors <- RColorBrewer::brewer.pal(length(levels(vsd_validation$severity)),"Set2")
+      MyPalette <-setNames(plotcolors,as.list(levels(vsd_validation$severity)))
 
 
     }else if (cohortname=="Ostrowski"){
-      vsd$severity[is.na(vsd$severity)] <- "Control"  
-      vsd$severity <- ordered(vsd$severity, levels=c("Control","0","1","2","3"))
+      vsd_validation$severity[is.na(vsd_validation$severity)] <- "Control"  
+      vsd_validation$severity <- ordered(vsd_validation$severity, levels=c("Control","0","1","2","3"))
       #plotcolors <- c("#00AFBB", rep("#E7B800",times=2), rep("#FC4E07", times=3))
-      plotcolors <- RColorBrewer::brewer.pal(length(levels(vsd$severity)),"Set2")
-      MyPalette <-setNames(plotcolors,as.list(levels(vsd$severity)))
+      plotcolors <- RColorBrewer::brewer.pal(length(levels(vsd_validation$severity)),"Set2")
+      MyPalette <-setNames(plotcolors,as.list(levels(vsd_validation$severity)))
     }else if (cohortname=="Mo_UC"){
-      vsd$severity <- vsd$Diagnose
-      vsd$severity[is.na(vsd$severity)] <- "Control"  
+      vsd_validation$severity <- vsd_validation$Diagnose
+      vsd_validation$severity[is.na(vsd_validation$severity)] <- "Control"  
       #plotcolors <- c("#00AFBB", rep("#E7B800",times=0), rep("#FC4E07", times=1))
-      plotcolors <- RColorBrewer::brewer.pal(length(levels(vsd$severity)),"Set2")
-      MyPalette <-setNames(plotcolors,as.list(levels(vsd$severity)))
+      plotcolors <- RColorBrewer::brewer.pal(length(levels(vsd_validation$severity)),"Set2")
+      MyPalette <-setNames(plotcolors,as.list(levels(vsd_validation$severity)))
       }
   for (geneset in names(marker)) {
     print(geneset)
@@ -61,16 +61,16 @@ for (cohort in names(validationcohorts)){
     print(marker[[geneset]])
     
     #####SCORPIUS Trajectory#######
-    rd2 <- uwot::umap(t(assay(vsd)[rownames(assay(vsd)) %in% markergenes,]))
+    rd2 <- uwot::umap(t(assay(vsd_validation)[rownames(assay(vsd_validation)) %in% markergenes,]))
     colnames(rd2) <- c('UMAP1', 'UMAP2')
     traj <- SCORPIUS::infer_trajectory(rd2)
-    #draw_trajectory_plot(rd2, vsd$Diagnose, traj$path, contour = TRUE)
+    #draw_trajectory_plot(rd2, vsd_validation$Diagnose, traj$path, contour = TRUE)
 
     
     #####Plots based on Trajectory#######
     marginalPseudotimeUMAP <- ggExtra::ggMarginal(
       ggplot(data=data.frame(rd2), aes(x = UMAP1, y= UMAP2))+
-        geom_point(aes( color=as.factor(vsd$severity)),size=4)+
+        geom_point(aes( color=as.factor(vsd_validation$severity)),size=4)+
         geom_path(aes_string("Comp1", "Comp2"), data.frame(traj$path), 
                   size = 0.5, alpha = 1)+ theme_bw()+
         theme(legend.position="bottom",text=element_text(family="Arial", size=18), legend.box="horizontal")+labs(shape="Pseudotime", color=severityscale)+ 
@@ -80,12 +80,12 @@ for (cohort in names(validationcohorts)){
     dg <- data.table(Pseudotime=ifelse(
       rep(
         median(
-          data.table(Pseudotime=traj$time, Severity=vsd$severity)[Severity %in% "Control",]$Pseudotime
+          data.table(Pseudotime=traj$time, Severity=vsd_validation$severity)[Severity %in% "Control",]$Pseudotime
         )>=0.5, times=length(traj$time)
       ),
       as.vector(1-traj$time),
       as.vector(traj$time)),
-      severity=vsd$severity)
+      severity=vsd_validation$severity)
     # try(dg$severity <- revalue(dg$severity, c("0"="Control")))
     
     PseudotimeSupervisedCorrelation <- ggplot(data = dg, aes(x=Pseudotime, y = severity)) + 
@@ -99,7 +99,7 @@ for (cohort in names(validationcohorts)){
       scale_discrete_manual(aesthetics = "point_color", values = MyPalette)+ scale_y_discrete(drop=FALSE)
     ggsave(plot=PseudotimeSupervisedCorrelation, filename=paste0(output_location,"/",cohortname,"_",geneset,"_PseudotimeSupervisedCorrelation.svg"),dpi=300,width = 120, height =120, units = "mm", device='svg')    
     
-    df <- data.table(data.table(t(assay(vsd)[rownames(assay(vsd)) %in% markergenes,])),Pseudotime=traj$time, Diagnose=vsd$Diagnose)
+    df <- data.table(data.table(t(assay(vsd_validation)[rownames(assay(vsd_validation)) %in% markergenes,])),Pseudotime=traj$time, Diagnose=vsd_validation$Diagnose)
     if(median(df[df$Diagnose %in% "Control",]$Pseudotime)>=0.5){df$Pseudotime <- 1-df$Pseudotime}
     melted <- melt(df[,colnames(df) %in% c("Pseudotime", markergenes, "Diagnose"), with=FALSE], id.vars=c('Pseudotime','Diagnose'))
     expressiontopseudotime <-  ggplot(melted,aes(x=Pseudotime,group='Diagnose'))+
@@ -118,5 +118,5 @@ for (cohort in names(validationcohorts)){
     }
 }
 
-# cor.test(x=as.numeric(ordered(replace(vsd$severity, vsd$severity%in%NA,"Control"), levels=c("Control","0","1","2","3"))),
+# cor.test(x=as.numeric(ordered(replace(vsd_validation$severity, vsd_validation$severity%in%NA,"Control"), levels=c("Control","0","1","2","3"))),
 #          y=1-traj$time,method=c("spearman"))

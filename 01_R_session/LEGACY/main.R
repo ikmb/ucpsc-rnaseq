@@ -20,7 +20,7 @@ library(viridis)
 library(ggrepel)
 library(ggvenn)
 source("functions.R")
-
+source("RandomForestfunction.R")
 #import fonts:
 #font_import()
 
@@ -124,9 +124,9 @@ RFset <- list(RandomForestFeatureSelection(table=as.data.table(t(assay(vsd))),se
               RandomForestFeatureSelection(table=as.data.table(t(assay(vsd))),set_seed = 223,splittestratio=0.8, featuretablesize=50),
               RandomForestFeatureSelection(table=as.data.table(t(assay(vsd))),set_seed = 224,splittestratio=0.8, featuretablesize=50))
 
+RFGS <- Reduce(intersect,lapply(RFset,"[[",1))
 
-
-RFGS <- as.vector(unlist(fread("rf50_with_seed.txt", header=F)))
+#RFGS <- as.vector(unlist(fread("rf50_with_seed.txt", header=F)))
 RFGS
 
 #DEGS:
