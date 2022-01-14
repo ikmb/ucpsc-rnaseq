@@ -262,13 +262,13 @@ validation_z_con_stabilised <- transpose_datatable(validation_z_con_stabilised)
 
 ####RF for validation####
 Mo_genefeatures <- c("rn",rownames(assay(vsd_validation)))
-sum(colnames(merged_RF) %in% Mo_genefeatures)
+sum(colnames(filtered_merged_RF) %in% Mo_genefeatures)
 #we do not find all gene features from our dataset in the mo dataset, so we intersect, rerun RF on our merged dataset and then try to predict outcome in Mo
 Mo_dataset <- data.table(validation_z_con_stabilised, Diagnose=vsd_validation$Diagnose)
 
 
-reduced_merged_RF <- merged_RF[,intersect(colnames(Mo_dataset), colnames(merged_RF)),with=F]
-reduced_Mo_RF <- Mo_dataset[,intersect(colnames(Mo_dataset), colnames(merged_RF)),with=F]
+reduced_merged_RF <- filtered_merged_RF[,intersect(colnames(Mo_dataset), colnames(filtered_merged_RF)),with=F]
+reduced_Mo_RF <- Mo_dataset[,intersect(colnames(Mo_dataset), colnames(filtered_merged_RF)),with=F]
 
 
 set.seed(seednr)
@@ -335,16 +335,16 @@ validation2_controls <- ifelse(dds_validation2$Diagnose == "Control",TRUE,FALSE)
 validation2_vst_counts <- data.table((assay(vsd_validation2)[,]))
 
 
-# validation2_z_con_stabilised <- data.table(apply(validation2_vst_counts,
-#                                                  1,function(x){y <- x[validation2_controls];z <- y[remove_outlier_filter(y)];
-#                                                  (x-mean(y))/sd(z)}),
-#                                            keep.rownames=TRUE)
-validation2_z_con_stabilised <- outlierfiltered_control_transformation(validation2_vst_counts, controlsvector = validation2_controls)
+validation2_z_con_stabilised <- data.table(apply(validation2_vst_counts,
+                                                 1,function(x){y <- x[validation2_controls];z <- y[remove_outlier_filter(y)];
+                                                 (x-mean(y))/sd(z)}),
+                                           keep.rownames=TRUE)
+# validation2_z_con_stabilised <- outlierfiltered_control_transformation(validation2_vst_counts, controlsvector = validation2_controls)
+# 
+# validation2_z_con_stabilised <- data.table(rn=rownames(assay(vsd_validation2)), validation2_z_con_stabilised)
+# validation2_z_con_stabilised <- transpose_datatable(validation2_z_con_stabilised)
 
-validation2_z_con_stabilised <- data.table(rn=rownames(assay(vsd_validation2)), validation2_z_con_stabilised)
-validation2_z_con_stabilised <- transpose_datatable(validation2_z_con_stabilised)
-
-# colnames(validation2_z_con_stabilised) <- c("rn",rownames(assay(vsd_validation2)))
+colnames(validation2_z_con_stabilised) <- c("rn",rownames(assay(vsd_validation2)))
 
 # ggplot(validation2_z_con_stabilised,aes(x=colData(vsd_validation2)$severity,y=S100A12))+geom_boxplot()+geom_jitter(width=0.05)
 
@@ -352,13 +352,13 @@ validation2_z_con_stabilised <- transpose_datatable(validation2_z_con_stabilised
 
 ####RF for validation2####
 Planell_genefeatures <- c("rn",rownames(assay(vsd_validation2)))
-sum(colnames(merged_RF) %in% Planell_genefeatures)
+sum(colnames(filtered_merged_RF) %in% Planell_genefeatures)
 #we do not find all gene features from our dataset in the mo dataset, so we intersect, rerun RF on our merged dataset and then try to predict outcome in Mo
 
 Planell_dataset <- data.table(validation2_z_con_stabilised, Diagnose=vsd_validation2$Diagnose)
 
-reduced2_merged_RF <- merged_RF[,intersect(colnames(Planell_dataset), colnames(merged_RF)),with=F]
-reduced2_Planell_RF <- Planell_dataset[,intersect(colnames(Planell_dataset), colnames(merged_RF)),with=F]
+reduced2_merged_RF <- filtered_merged_RF[,intersect(colnames(Planell_dataset), colnames(filtered_merged_RF)),with=F]
+reduced2_Planell_RF <- Planell_dataset[,intersect(colnames(Planell_dataset), colnames(filtered_merged_RF)),with=F]
 
 set.seed(seednr)
 reduced2_splitted <- rsample::initial_split(reduced2_merged_RF[,-"rn"], 0.5)
