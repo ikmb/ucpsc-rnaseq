@@ -1,18 +1,18 @@
 require(data.table)
 require(tidyverse)
 require(DESeq2)
-require(pheatmap)
-require(rvcheck)
+# require(pheatmap)
+# require(rvcheck)
 require(CEMiTool)
-require(M3C)
+# require(M3C)
 require(rmarkdown)
-require(RColorBrewer)
-require(gridExtra)
-require(ggpubr)
-require(ggplotify)
-require(VennDiagram)
-require(extrafont)
-require(SCORPIUS)
+# require(RColorBrewer)
+# require(gridExtra)
+# require(ggpubr)
+# require(ggplotify)
+# require(VennDiagram)
+# require(extrafont)
+# require(SCORPIUS)
 #########FUNCTIONS##########
 getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
   require(data.table)
@@ -421,4 +421,189 @@ LEGACYRandomForestFeatureSelection <- function(table=NULL,set_seed=123, splittes
   variable_importance <- data.table(feature=names(rfmodel$variable.importance), importance=rfmodel$variable.importance)
   return_features <- head(variable_importance[order(variable_importance$importance, decreasing=T),],featuretablesize)
   return(return_features)
+}
+
+#Wrapping CEMiTool Analysis with Report-Output:
+setGeneric('generate_report', function(cem, ...) {
+  standardGeneric('generate_report')
+})
+
+#' @rdname generate_report
+setMethod('generate_report', signature('CEMiTool'),
+          function(cem, max_rows_ora=50, title="Report", directory=output_location, force=FALSE, nameofcohort=cohortname, ...) {
+            if(is.null(unique(cem@module$modules))){
+              stop("No modules in CEMiTool object! Did you run find_modules()?")
+            }
+            if(dir.exists(directory)){
+              if(!force){
+                stop("Stopping analysis: ", directory, " already exists! Use force=TRUE to overwrite.")
+              }
+            }else{
+              dir.create(directory, recursive=TRUE)
+            }
+            rmd <- system.file("report", "report.Rmd", package = "CEMiTool")
+            rmarkdown::render(rmd,output_file = nameofcohort, output_dir=directory, intermediates_dir=directory, quiet=TRUE, ...)
+          })
+
+
+CEMiwrapper <- function(expressionmatrix=assay(vsd), ID=metadata$SampleID, Groups=metadata$selectedgenesm3c, gmt_location=gmt_file, reportname="report", beta20=FALSE, applyfiltering=TRUE, ...){
+  if(isFALSE(beta20)){
+    foreach::registerDoSEQ()
+    sample_annot <- data.frame(ID, Groups)
+    colnames(sample_annot)<-  c("SampleName", "Class")
+    CountsforCemi <- data.frame(expressionmatrix[,ID], row.names = rownames(expressionmatrix))
+    #Geneset enrichment analysis of CEMI:
+    gmt_in <- CEMiTool::read_gmt(gmt_location)
+    gmt_in <- gmt_in[!gmt_in$gene=="",]
+    #Adding Interactions: 
+    #int_df <- fread(interaction_location)
+    #class(int_df) <- "data.frame"    
+    #All together:
+    cem <- CEMiTool::cemitool(CountsforCemi, sample_annot, gmt_in, 
+                              filter=applyfiltering, plot=TRUE, verbose=TRUE)}
+  else{
+    foreach::registerDoSEQ()
+    sample_annot <- data.frame(ID, Groups)
+    colnames(sample_annot)<-  c("SampleName", "Class")
+    CountsforCemi <- data.frame(expressionmatrix[,ID], row.names = rownames(expressionmatrix))
+    #Geneset enrichment analysis of CEMI:
+    gmt_in <- CEMiTool::read_gmt(gmt_location)
+    gmt_in <- gmt_in[!gmt_in$gene=="",]
+    
+    #All together:
+    cem <- CEMiTool::cemitool(CountsforCemi, sample_annot, gmt_in, 
+                              filter=TRUE, plot=TRUE, verbose=TRUE,set_beta = 20)
+  }
+  generate_report(cem, force=T, title = cohortname, nameofcohort=reportname,...)
+  return(cem)
+}
+
+# return a heatmap for the expression of the input-genes in defined cell types 
+blueprintplot <- function(genes=NULL){
+  require(pheatmap)
+  require(ggplotify)
+  bprint_expression <- fread("../data_rescources/E-MTAB-3827-query-results.tpms.tsv")
+  bprint_expression_l<-pivot_longer(bprint_expression, 3:29, names_to = "cell_type", values_to = "TPM")%>%as.data.table()
+  setnames(bprint_expression_l,c("gene_ID","gene_name","cell_type","TPM"))
+  celltypes_to_keep<-c("mature neutrophil", "erythroblast", "conventional dendritic cell", "macrophage", "CD4-positive, alpha-beta T cell",
+                       "CD8-positive, alpha-beta T cell", "CD38-negative naive B cell","CD8-positive", "CD14-positive, CD16-negative classical monocyte")
+  
+  length_genes_blueprint_intersect<-length(intersect(genes,bprint_expression$`Gene Name`))
+  genes_blueprint_intersect<-intersect(genes,bprint_expression$`Gene Name`)
+  bprint_expression_mat<-as.matrix(bprint_expression[`Gene Name`%in%genes,-2:-1],rownames = bprint_expression[`Gene Name`%in%genes,`Gene Name`])
+  bprint_expression_mat[(bprint_expression_mat)==0]<-min(bprint_expression_mat,na.rm = T)
+  #make it a z score of the log values
+  z_bprint_expression_mat<-scale(t(log10(bprint_expression_mat)))
+  #kick NAs
+  z_bprint_expression_mat[is.na(z_bprint_expression_mat)]<-min(z_bprint_expression_mat,na.rm = T)
+  z_bprint_expression_mat_reduced<-z_bprint_expression_mat#[rownames(z_bprint_expression_mat)%in%celltypes_to_keep,]
+  rownames(z_bprint_expression_mat_reduced) <- gsub("-negative","-",gsub("-positive","+",rownames(z_bprint_expression_mat_reduced)))
+  
+  blueprint <- as.ggplot(pheatmap(t(z_bprint_expression_mat_reduced),cluster_rows = F,cluster_cols = F,fontsize=7,border_color=NA,legend=F,show_rownames=F,main="genes",breaks=seq(from=-3,to=3,length.out = 101),silent=F))#,filename="marker_expression_BLUEPRINT_celltypes.png", width = 7, height =7)
+  return(blueprint)
+  }
+
+#return a data table with z-scores for enrichment of specific cell type of given input-genes
+blueprintenrichments <- function(genes=NULL){
+  bprint_expression <- fread("../data_rescources/E-MTAB-3827-query-results.tpms.tsv")
+  bprint_expression_l<-pivot_longer(bprint_expression, 3:29, names_to = "cell_type", values_to = "TPM")%>%as.data.table()
+  setnames(bprint_expression_l,c("gene_ID","gene_name","cell_type","TPM"))
+  celltypes_to_keep<-c("mature neutrophil", "erythroblast", "conventional dendritic cell", "macrophage", "CD4-positive, alpha-beta T cell",
+                       "CD8-positive, alpha-beta T cell", "CD38-negative naive B cell","CD8-positive", "CD14-positive, CD16-negative classical monocyte")
+  
+  length_genes_blueprint_intersect<-length(intersect(genes,bprint_expression$`Gene Name`))
+  genes_blueprint_intersect<-intersect(genes,bprint_expression$`Gene Name`)
+  bprint_expression_mat<-as.matrix(bprint_expression[`Gene Name`%in%genes,-2:-1],rownames = bprint_expression[`Gene Name`%in%genes,`Gene Name`])
+  bprint_expression_mat[(bprint_expression_mat)==0]<-min(bprint_expression_mat,na.rm = T)
+  #make it a z score of the log values
+  z_bprint_expression_mat<-scale(t(log10(bprint_expression_mat)))
+  #kick NAs
+  z_bprint_expression_mat[is.na(z_bprint_expression_mat)]<-min(z_bprint_expression_mat,na.rm = T)
+  z_bprint_expression_mat_reduced<-z_bprint_expression_mat#[rownames(z_bprint_expression_mat)%in%celltypes_to_keep,]
+  rownames(z_bprint_expression_mat_reduced) <- gsub("-negative","-",gsub("-positive","+",rownames(z_bprint_expression_mat_reduced)))
+  
+  enrichmentstats <- apply(z_bprint_expression_mat_reduced,1,function(x) sum(x)/length(x))
+  enrichment_df <- data.frame(celltype=names(enrichmentstats),enrichment=enrichmentstats)
+  # blueprint <- as.ggplot(pheatmap(t(z_bprint_expression_mat_reduced),cluster_rows = F,cluster_cols = F,fontsize=7,border_color=NA,legend=F,show_rownames=F,main="genes",breaks=seq(from=-3,to=3,length.out = 101),silent=F))#,filename="marker_expression_BLUEPRINT_celltypes.png", width = 7, height =7)
+  return(enrichment_df)
+  }
+
+#perform Random Forest in a tidymodels workflow with tuning of parameters. Takes some time. Added multithreading for some performance improvements. 
+#Needs the training result of training() from the rsample library and the column name of the outcome variable.
+return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL){
+  require(doParallel)
+  require(tidyverse)
+  require(tidymodels)
+  
+  #Registering all cores: 
+  all_cores <- parallel::detectCores(logical = FALSE)
+  
+  cl <- makePSOCKcluster(all_cores)
+  registerDoParallel(cl)
+  
+  # Models
+  
+  model_rf <- 
+    rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>% 
+    set_engine("ranger", importance = "impurity") %>% 
+    set_mode("classification")
+  
+  # model_xgboost <- 
+  #   boost_tree(mtry = tune(), trees = tune(), min_n = tune()) %>% 
+  #   set_engine("xgboost", importance = "impurity") %>% 
+  #   set_mode("classification")
+  
+  # Grid of hyperparameters
+  
+  grid_rf <- 
+    grid_max_entropy(
+      mtry(range = c(1, 20)), 
+      trees(range = c(500, 1000)),
+      min_n(range = c(2, 10)),
+      size = 30)
+  
+  # Formula
+  formula_rf <- paste0(outcome, " ~ .") %>% as.formula()
+  
+  # Workflow
+  
+  wkfl_rf <- 
+    workflow() %>% 
+    add_formula(formula_rf) %>%
+    add_model(model_rf)
+  
+  # wkfl_wgboost <-
+  #   workflow() %>%
+  #   add_formula(Diagnose ~ .) %>%
+  #   add_model(model_xgboost)
+  
+  # Cross validation method
+  
+  cv_folds <- vfold_cv(training_df, v = 5)
+  cv_folds
+  
+  # Choose metrics
+  
+  my_metrics <- metric_set(roc_auc, accuracy, sens, spec, precision, recall)
+  
+  # Tuning
+  
+  rf_fit <- tune_grid(
+    wkfl_rf,
+    resamples = cv_folds,
+    grid = grid_rf,
+    metrics = my_metrics,
+    control = control_grid(verbose = TRUE) # don't save prediction (imho)
+  )
+  
+  # Fit best model 
+  
+  tuned_model <-
+    wkfl_rf %>% 
+    finalize_workflow(select_best(rf_fit, metric = "accuracy", maximize = TRUE)) %>% 
+    fit(data = training_df)
+  
+  #unregister all cores
+  stopCluster(cl)
+  return(tuned_model)
 }
