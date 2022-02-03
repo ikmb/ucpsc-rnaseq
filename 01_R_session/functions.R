@@ -563,7 +563,7 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL){
       size = 30)
   
   # Formula
-  formula_rf <- paste0(outcome, " ~ .") %>% as.formula()
+  formula_rf <- paste0(outcome_col, " ~ .") %>% as.formula()
   
   # Workflow
   
@@ -600,10 +600,59 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL){
   
   tuned_model <-
     wkfl_rf %>% 
-    finalize_workflow(select_best(rf_fit, metric = "accuracy", maximize = TRUE)) %>% 
+    finalize_workflow(select_best(rf_fit, metric = "accuracy")) %>% 
     fit(data = training_df)
   
   #unregister all cores
   stopCluster(cl)
   return(tuned_model)
+}
+
+
+# dataset = merged_RF[merged_RF$Diagnose == 0,-c("rn","Diagnose")]
+# splitfactor = 0.5
+# outcome_column = "Cohort"
+# seed = seednr
+#make sure outcome_col is a binary factor, there is no sanity test yet in place for this.
+performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome_column=NULL,seed=123){
+  require(rsample)
+  require(pROC)
+  
+  dataset[[outcome_column]] <- droplevels(dataset[[outcome_column]])
+  levels(dataset[[outcome_column]]) <- c(0,1
+  )
+  set.seed(seednr)
+  splitted <- rsample::initial_split(dataset, splitfactor)
+  rftrain <- training(splitted)
+  rftest <- testing(splitted)
+  if(is.null(testing_dataset)){testing_dataset <- rftest}
+  Resultitem <- outcome_column
+  
+  tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
+  
+  
+  # predicted_train <- predict(tuned_model, rftrain, type = "prob")
+  predicted_test <- predict(tuned_model, testing_dataset, type = "prob")
+  predicted <- as.data.table(predicted_test)[,2]%>%unlist()%>%as.vector()%>%as.numeric()
+  
+  optCutOff <- optimalCutoff(testing_dataset[[Resultitem]], predicted, optimiseFor = "Both")[1]
+  
+  misClassErrorResult <- misClassError(testing_dataset[[Resultitem]], predicted)#, threshold = optCutOff)
+  
+  # ROCplotResult <- plotROC(rftest[[Resultitem]], predicted, returnSensitivityMat=T)
+  proc_predicted_test <- predict(tuned_model, testing_dataset) %>% unlist() %>% as.vector() %>% as.integer()
+  realvalue <- as.integer(testing_dataset[[Resultitem]])-1
+  rocobject <- pROC::roc(realvalue ~ proc_predicted_test)
+  
+  concordanceResult <- Concordance(testing_dataset[[Resultitem]], predicted)
+  sensitivityResult <- InformationValue::sensitivity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  specificityResult <- InformationValue::specificity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  confusionMatrixResult <- confusionMatrix(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  # confusionMatrixResult
+  variable_importance <- data.table(feature=names(extract_fit_parsnip(tuned_model)$fit$variable.importance), importance=extract_fit_parsnip(tuned_model)$fit$variable.importance)
+  variable_importance <- variable_importance[order(variable_importance$importance,decreasing = T),]
+  # top25 <- head(variable_importance[order(variable_importance$importance, decreasing=T),],25)
+  return_list <- list(rocobject,tuned_model,concordanceResult,sensitivityResult,specificityResult,confusionMatrixResult,variable_importance)
+  names(return_list) <- c("pROC_object","tuned_model","concordanceResult","sensitivityResult","specificityResult","confusionMatrixResult","variable_importance")
+  return(return_list)
 }
