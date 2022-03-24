@@ -23,6 +23,7 @@ library(rsample)      # data splitting
 library(ranger)
 library(Information)
 library(InformationValue)
+library(ComplexHeatmap)
 source("functions.R")
 
 seednr <- 555555
@@ -70,7 +71,6 @@ merged_rawcounts <- merged_rawcounts[,..intersectedgenes]
 
 #Filtering for allowing only 10% of samples with zero values per gene
 merged_rawcounts <- merged_rawcounts[,as.vector(colSums(merged_rawcounts == 0)<(dim(merged_rawcounts)[1]/10)),with=FALSE]
-
 
 merged_rawcounts <- t(merged_rawcounts)
 colnames(merged_rawcounts) <- SampleIDs
@@ -169,7 +169,7 @@ vsd_validation$severity[is.na(vsd_validation$severity)] <- "Control"
 
 
 res_validation <- results(dds_validation, c("Diagnose","Control","UC"),tidy=TRUE)
-res_validation[res_validation$row %in% top25$feature,]
+# res_validation[res_validation$row %in% top25$feature,]
 
 validation_controls <- ifelse(dds_validation$Diagnose == "Control",TRUE,FALSE)
 validation_vst_counts <- data.table(assay(vsd_validation)[,])
@@ -207,47 +207,6 @@ Mo_CON_UC_Diagnose_results <- performML(dataset = reduced_merged_RF[,-c("rn")],t
 
 pROC::auc(CON_UC_Diagnose_results$pROC_object)
 
-
-# set.seed(seednr)
-# reduced_splitted <- rsample::initial_split(reduced_merged_RF[,-"rn"], 0.5)
-# reduced_rftrain <- training(reduced_splitted)
-# reduced_rftest <- testing(reduced_splitted)
-# 
-# levels(reduced_Mo_RF$Diagnose) <- c("0","1")
-# 
-# reduced_Resultitem <- "Diagnose"
-# 
-# #case.weights calculation
-# reduced_training_sample_weights <- case_when(reduced_rftrain$Diagnose == "0" ~ 1/sum(reduced_rftrain$Diagnose=="0"),
-#                                              reduced_rftrain$Diagnose == "1" ~ 1/sum(reduced_rftrain$Diagnose=="1"),
-#                                              reduced_rftrain$Diagnose == "2" ~ 1/sum(reduced_rftrain$Diagnose=="2"),
-#                                              reduced_rftrain$Diagnose == "3" ~ 1/sum(reduced_rftrain$Diagnose=="3"))
-# 
-# reduced_rfmodel <- ranger(
-#   formula         = Diagnose ~ ., 
-#   data            = reduced_rftrain, 
-#   num.trees       = 1000,
-#   seed            = seednr,
-#   probability     = TRUE,
-#   importance      = 'impurity',
-#   classification = TRUE,
-#   #class.weights = c(1/45,1/114,1/108,1/256),
-#   case.weights = reduced_training_sample_weights
-# )
-# #predict in test
-# reduced_predictedmodel <- predict(reduced_rfmodel, reduced_rftest, type="response")
-# reduced_predicted <- as.data.table(reduced_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-# 
-# reduced_optCutOff <- optimalCutoff(reduced_rftest[[reduced_Resultitem]], reduced_predicted, optimiseFor = "Both")[1]
-# reduced_misClassErrorResult <- misClassError(reduced_rftest[[reduced_Resultitem]], reduced_predicted)#, threshold = optCutOff)
-# ROCplotResult <- plotROC(reduced_rftest[[reduced_Resultitem]], reduced_predicted, returnSensitivityMat=T)
-# #repeat for Mo
-# reduced_predictedmodel <- predict(reduced_rfmodel, reduced_Mo_RF, type="response")
-# reduced_predicted <- as.data.table(reduced_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-# reduced_optCutOff <- optimalCutoff(reduced_Mo_RF[[reduced_Resultitem]], reduced_predicted, optimiseFor = "Both")[1]
-# ROCplotResult <- plotROC(reduced_Mo_RF[[reduced_Resultitem]], reduced_predicted, returnSensitivityMat=T)
-# Mo_variable_importance <- data.table(feature=names(reduced_rfmodel$variable.importance), importance=reduced_rfmodel$variable.importance)
-# head(Mo_variable_importance[order(Mo_variable_importance$importance, decreasing=T),],25)
 
 # ggplot(validation_z_con_stabilised,aes(x=colData(vsd_validation)$severity,y=ZFP36L2))+geom_boxplot()+geom_jitter(width=0.05)
 
@@ -297,55 +256,72 @@ Planell_dataset <- data.table(validation2_z_con_stabilised, Diagnose=vsd_validat
 reduced2_merged_RF <- filtered_merged_RF[,intersect(colnames(Planell_dataset), colnames(filtered_merged_RF)),with=F]
 reduced2_Planell_RF <- Planell_dataset[,intersect(colnames(Planell_dataset), colnames(filtered_merged_RF)),with=F]
 
-set.seed(seednr)
-reduced2_splitted <- rsample::initial_split(reduced2_merged_RF[,-"rn"], 0.5)
-reduced2_rftrain <- training(reduced2_splitted)
-reduced2_rftest <- testing(reduced2_splitted)
-# levels(rftrain$Diagnose) <- c("0","1","1")
-# levels(rftest$Diagnose) <- c("0","1","1")
-levels(reduced2_Planell_RF$Diagnose) <- c("0","1")
-#rftest$DiagnoseCohort <- factor(rftest$DiagnoseCohort)
-reduced2_Resultitem <- "Diagnose"
-#case.weights calculation
-reduced2_training_sample_weights <- case_when(reduced2_rftrain$Diagnose == "0" ~ 1/sum(reduced2_rftrain$Diagnose=="0"),
-                                              reduced2_rftrain$Diagnose == "1" ~ 1/sum(reduced2_rftrain$Diagnose=="1"),
-                                              reduced2_rftrain$Diagnose == "2" ~ 1/sum(reduced2_rftrain$Diagnose=="2"),
-                                              reduced2_rftrain$Diagnose == "3" ~ 1/sum(reduced2_rftrain$Diagnose=="3"))
+levels(reduced2_Planell_RF[["Diagnose"]]) <- c(0,1)
 
-reduced2_rfmodel <- ranger(
-  formula         = Diagnose ~ ., 
-  data            = reduced2_rftrain, 
-  num.trees       = 1000,
-  seed            = seednr,
-  probability     = TRUE,
-  importance      = 'impurity',
-  classification = TRUE,
-  #class.weights = c(1/45,1/114,1/108,1/256),
-  case.weights = reduced2_training_sample_weights
-)
-#predict in test
-reduced2_predictedmodel <- predict(reduced2_rfmodel, reduced2_rftest, type="response")
-reduced2_predicted <- as.data.table(reduced2_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-
-reduced2_optCutOff <- optimalCutoff(reduced2_rftest[[reduced2_Resultitem]], reduced2_predicted, optimiseFor = "Both")[1]
-reduced2_misClassErrorResult <- misClassError(reduced2_rftest[[reduced2_Resultitem]], reduced2_predicted)#, threshold = optCutOff)
-ROCplotResult <- plotROC(reduced2_rftest[[reduced2_Resultitem]], reduced2_predicted, returnSensitivityMat=T)
-
-#repeat for Planell
-reduced2_predictedmodel <- predict(reduced2_rfmodel, reduced2_Planell_RF, type="response")
-reduced2_predicted <- as.data.table(reduced2_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-reduced2_optCutOff <- optimalCutoff(reduced2_Planell_RF[[reduced2_Resultitem]], reduced2_predicted, optimiseFor = "Both")[1]
-ROCplotResult <- plotROC(reduced2_Planell_RF[[reduced2_Resultitem]], reduced2_predicted, returnSensitivityMat=T)
-Planell_variable_importance <- data.table(feature=names(reduced2_rfmodel$variable.importance), importance=reduced2_rfmodel$variable.importance)
-head(Planell_variable_importance[order(Planell_variable_importance$importance, decreasing=T),],25)
-
-# ggplot(validation2_z_con_stabilised,aes(x=colData(vsd_validation2)$severity,y=ZFP36L2))+geom_boxplot()+geom_jitter(width=0.05)
-# ggplot(validation2_z_con_stabilised,aes(x=colData(vsd_validation2)$severity,y=HNRNPA0))+geom_boxplot()+geom_jitter(width=0.05)
-
-confusionMatrixResult <- confusionMatrix(reduced2_Planell_RF[[reduced2_Resultitem]], reduced2_predicted, threshold = reduced2_optCutOff)
-confusionMatrixResult
+Planell_CON_UC_Diagnose_results <- performML(dataset = reduced2_merged_RF[,-c("rn")],testing_dataset = reduced2_Planell_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
+reducedforplanell_CON_UC_Diagnose_results <- predictwithatunedmodel(tuned_model = Planell_CON_UC_Diagnose_results$tuned_model, testing_dataset = Planell_CON_UC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
+#Auroc for external validation dataset
+pROC::auc(Planell_CON_UC_Diagnose_results$pROC_object)
+# pROC::ci.auc(Planell_CON_UC_Diagnose_results$pROC_object)
+#validation with own test dataset
+pROC::auc(reducedforplanell_CON_UC_Diagnose_results$pROC_object)
 
 
+
+# Ostrowski validation Preparation####
+validation3_cohortname<- "Ostrowski"
+validation3cohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
+                           Mo_UC="Diagnose",
+                           Planell="Endoscopic\nMayo Score")
+vsd_validation3 <- getCohortsVSD(cohortname=validation3_cohortname)
+severityscale <- validation3cohorts[[validation3_cohortname]]
+dds_validation3 <- getCohortsDDS(cohortname=validation3_cohortname)
+vsd_validation3$severity <- vsd_validation3$Diagnose
+vsd_validation3$severity[is.na(vsd_validation3$severity)] <- "Control"  
+
+# ggplot(as.data.table(t(assay(vsd_validation3)[,])),aes(x=colData(vsd_validation3)$severity,y=S100A6))+geom_boxplot()+geom_jitter(width=0.05)
+
+# res_validation3 <- results(dds_validation3, c("Diagnose","Control","UC"),tidy=TRUE)
+# res_validation3[res_validation3$row %in% top25$feature,]
+
+validation3_controls <- ifelse(dds_validation3$Diagnose == "Control",TRUE,FALSE)
+validation3_vst_counts <- data.table((assay(vsd_validation3)[,]))
+
+
+validation3_z_con_stabilised <- data.table(apply(validation3_vst_counts,
+                                                 1,function(x){y <- x[validation3_controls];z <- y[remove_outlier_filter(y)];
+                                                 (x-mean(y))/sd(z)}),
+                                           keep.rownames=TRUE)
+# validation3_z_con_stabilised <- outlierfiltered_control_transformation(validation3_vst_counts, controlsvector = validation3_controls)
+# 
+# validation3_z_con_stabilised <- data.table(rn=rownames(assay(vsd_validation3)), validation3_z_con_stabilised)
+# validation3_z_con_stabilised <- transpose_datatable(validation3_z_con_stabilised)
+
+colnames(validation3_z_con_stabilised) <- c("rn",rownames(assay(vsd_validation3)))
+
+# ggplot(validation3_z_con_stabilised,aes(x=colData(vsd_validation3)$severity,y=S100A12))+geom_boxplot()+geom_jitter(width=0.05)
+
+
+
+# Ostrowski RF for validation3 Model####
+Ostrowski_genefeatures <- c("rn",rownames(assay(vsd_validation3)))
+sum(colnames(filtered_merged_RF) %in% Ostrowski_genefeatures)
+#we do not find all gene features from our dataset in the mo dataset, so we intersect, rerun RF on our merged dataset and then try to predict outcome in Mo
+
+Ostrowski_dataset <- data.table(validation3_z_con_stabilised, Diagnose=vsd_validation3$Diagnose)
+
+reduced3_merged_RF <- filtered_merged_RF[,intersect(colnames(Ostrowski_dataset), colnames(filtered_merged_RF)),with=F]
+reduced3_Ostrowski_RF <- Ostrowski_dataset[,intersect(colnames(Ostrowski_dataset), colnames(filtered_merged_RF)),with=F]
+
+levels(reduced3_Ostrowski_RF[["Diagnose"]]) <- c(0L,1L)
+
+Ostrowski_CON_UC_Diagnose_results <- performML(dataset = reduced3_merged_RF[,-c("rn")],testing_dataset = reduced3_Ostrowski_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
+reducedforOstrowski_CON_UC_Diagnose_results <- predictwithatunedmodel(tuned_model = Ostrowski_CON_UC_Diagnose_results$tuned_model, testing_dataset = Ostrowski_CON_UC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
+#Auroc for external validation dataset
+pROC::auc(Ostrowski_CON_UC_Diagnose_results$pROC_object)
+# pROC::ci.auc(Ostrowski_CON_UC_Diagnose_results$pROC_object)
+#validation with own test dataset
+pROC::auc(reducedforOstrowski_CON_UC_Diagnose_results$pROC_object)
 # LightGMB (NOT USED)####
 # set.seed(seednr)
 # reduced_splitted <- rsample::initial_split(reduced_merged_RF[,-"rn"], 0.5)
@@ -422,215 +398,84 @@ confusionMatrixResult
 
 # PSC vs UC model, no controls, no PSCUC ####
 
-set.seed(seednr)
-PSC_UC_splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 2,-c("rn","Cohort")], 0.5)#,"DiagnoseCohort"
-PSC_UC_rftrain <- training(PSC_UC_splitted)
-PSC_UC_rftest <- testing(PSC_UC_splitted)
+PSC_UC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 2,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
 
-#Convert Diagnose into a binary factor: 0=PSC, 1=UC
-PSC_UC_rftrain$Diagnose <- droplevels(PSC_UC_rftrain$Diagnose)
-levels(PSC_UC_rftrain$Diagnose) <- c(0,1)
-
-PSC_UC_rftest$Diagnose <- droplevels(PSC_UC_rftest$Diagnose)
-levels(PSC_UC_rftest$Diagnose) <- c(0,1)
-
-
-#check whether RF can distinguish between Cohorts in our merged dataset (it should not!)
-PSC_UC_Resultitem <- "Diagnose"
-
-PSC_UC_rfmodel <- ranger(
-  formula         = Diagnose ~ .,
-  data            = PSC_UC_rftrain,
-  num.trees       = 1000,
-  seed            = seednr,
-  probability     = TRUE,
-  importance      = 'impurity'
-)
-
-
-# PSC_UC_tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col="Diagnose")
-# 
-# 
-# PSC_UC_predictedtrain <- predict(PSC_UC_tuned_model, rftrain)
-# PSC_UC_predicted_test <- predict(PSC_UC_tuned_model, rftest)
-# # predicted <- as.data.table(predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-
-
-PSC_UC_predictedmodel <- predict(PSC_UC_rfmodel, PSC_UC_rftest, type="response")
-PSC_UC_predicted <- as.data.table(PSC_UC_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-
-# #evaluate
-PSC_UC_optCutOff <- optimalCutoff(PSC_UC_rftest[[PSC_UC_Resultitem]], PSC_UC_predicted, optimiseFor = "Both")[1]
-PSC_UC_misClassErrorResult <- misClassError(PSC_UC_rftest[[PSC_UC_Resultitem]], PSC_UC_predicted, threshold = PSC_UC_optCutOff)
-PSC_UC_ROCplotResult <- plotROC(PSC_UC_rftest[[PSC_UC_Resultitem]], PSC_UC_predicted, returnSensitivityMat=T)
-
-concordanceResult <- Concordance(PSC_UC_rftest[[PSC_UC_Resultitem]], PSC_UC_predicted)
-sensitivityResult <- sensitivity(PSC_UC_rftest[[PSC_UC_Resultitem]], PSC_UC_predicted, threshold = PSC_UC_optCutOff)
-specificityResult <- specificity(PSC_UC_rftest[[PSC_UC_Resultitem]], PSC_UC_predicted, threshold = PSC_UC_optCutOff)
-confusionMatrixResult <- confusionMatrix(PSC_UC_rftest[[PSC_UC_Resultitem]], PSC_UC_predicted, threshold = PSC_UC_optCutOff)
-confusionMatrixResult
-
-PSC_UC_variable_importance <- data.table(feature=names(PSC_UC_rfmodel$variable.importance), importance=PSC_UC_rfmodel$variable.importance)
-head(PSC_UC_variable_importance[order(PSC_UC_variable_importance$importance, decreasing=T),],25)
-PSC_UC_mostimpactfeature <- PSC_UC_variable_importance[PSC_UC_variable_importance$importance==max(PSC_UC_variable_importance$importance),feature]
+pROC::auc(PSC_UC_Diagnose_results$pROC_object)
 
 ggplot(merged_RF[,-c("rn","Cohort")])+geom_jitter(aes(x=Diagnose,y=ACLY))+geom_boxplot(aes(x=Diagnose,y=ACLY))#+facet_wrap(~merged_metadata$Cohort)
 
 
 # PSC vs Controls model, no UC, no PSCUC ####
-set.seed(seednr)
-PSC_CONTROL_splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose != 2 & merged_RF$Diagnose != 3,-c("rn","Cohort")], 0.5)#,"DiagnoseCohort"
-PSC_CONTROL_rftrain <- training(PSC_CONTROL_splitted)
-PSC_CONTROL_rftest <- testing(PSC_CONTROL_splitted)
 
-#Convert Diagnose into a binary factor: 0=CONTROL, 1=PSC
-PSC_CONTROL_rftrain$Diagnose <- droplevels(PSC_CONTROL_rftrain$Diagnose)
-levels(PSC_CONTROL_rftrain$Diagnose) <- c(0,1)
+PSC_CONTROL_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 2 & merged_RF$Diagnose != 3,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
 
-PSC_CONTROL_rftest$Diagnose <- droplevels(PSC_CONTROL_rftest$Diagnose)
-levels(PSC_CONTROL_rftest$Diagnose) <- c(0,1)
+pROC::auc(PSC_CONTROL_Diagnose_results$pROC_object)
 
-
-#check whether RF can distinguish between Cohorts in our merged dataset (it should not!)
-PSC_CONTROL_Resultitem <- "Diagnose"
-
-PSC_CONTROL_rfmodel <- ranger(
-  formula         = Diagnose ~ ., 
-  data            = PSC_CONTROL_rftrain, 
-  num.trees       = 1000,
-  seed            = seednr,
-  probability     = TRUE,
-  importance      = 'impurity'
-)
-
-PSC_CONTROL_predictedmodel <- predict(PSC_CONTROL_rfmodel, PSC_CONTROL_rftest, type="response")
-PSC_CONTROL_predicted <- as.data.table(PSC_CONTROL_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-
-# #evaluate
-PSC_CONTROL_optCutOff <- optimalCutoff(PSC_CONTROL_rftest[[PSC_CONTROL_Resultitem]], PSC_CONTROL_predicted, optimiseFor = "Both")[1]
-PSC_CONTROL_misClassErrorResult <- misClassError(PSC_CONTROL_rftest[[PSC_CONTROL_Resultitem]], PSC_CONTROL_predicted, threshold = PSC_CONTROL_optCutOff)
-PSC_CONTROL_ROCplotResult <- plotROC(PSC_CONTROL_rftest[[PSC_CONTROL_Resultitem]], PSC_CONTROL_predicted, returnSensitivityMat=T)
-
-concordanceResult <- Concordance(PSC_CONTROL_rftest[[PSC_CONTROL_Resultitem]], PSC_CONTROL_predicted)
-sensitivityResult <- sensitivity(PSC_CONTROL_rftest[[PSC_CONTROL_Resultitem]], PSC_CONTROL_predicted, threshold = PSC_CONTROL_optCutOff)
-specificityResult <- specificity(PSC_CONTROL_rftest[[PSC_CONTROL_Resultitem]], PSC_CONTROL_predicted, threshold = PSC_CONTROL_optCutOff)
-confusionMatrixResult <- confusionMatrix(PSC_CONTROL_rftest[[PSC_CONTROL_Resultitem]], PSC_CONTROL_predicted, threshold = PSC_CONTROL_optCutOff)
-confusionMatrixResult
-
-PSC_UC_variable_importance <- data.table(feature=names(PSC_CONTROL_rfmodel$variable.importance), importance=PSC_CONTROL_rfmodel$variable.importance)
-head(PSC_UC_variable_importance[order(PSC_UC_variable_importance$importance, decreasing=T),],25)
-PSC_UC_mostimpactfeature <- PSC_UC_variable_importance[PSC_UC_variable_importance$importance==max(PSC_UC_variable_importance$importance),feature]
 #0=Control, 1=PSC, 2=PSCUC, 3=UC
 ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=BACH2))+geom_jitter()+geom_boxplot()+scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 
 
 # PSC vs PSCUC, no CON, no UC ###########
-set.seed(seednr)
-PSC_PSCUC_splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 3,-c("rn","Cohort")], 0.5)#,"DiagnoseCohort"
-PSC_PSCUC_rftrain <- training(PSC_PSCUC_splitted)
-PSC_PSCUC_rftest <- testing(PSC_PSCUC_splitted)
 
-#Convert Diagnose into a factor: 0=PSC, 1=PSCUC
-PSC_PSCUC_rftrain$Diagnose <- droplevels(PSC_PSCUC_rftrain$Diagnose)
-levels(PSC_PSCUC_rftrain$Diagnose) <- c(0,1)
+PSC_PSCUC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 3,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
 
-PSC_PSCUC_rftest$Diagnose <- droplevels(PSC_PSCUC_rftest$Diagnose)
-levels(PSC_PSCUC_rftest$Diagnose) <- c(0,1)
+pROC::auc(PSC_PSCUC_Diagnose_results$pROC_object)
 
 
-#check whether RF can distinguish between Cohorts in our merged dataset (it should not!)
-PSC_PSCUC_Resultitem <- "Diagnose"
-
-PSC_PSCUC_rfmodel <- ranger(
-  formula         = Diagnose ~ ., 
-  data            = PSC_PSCUC_rftrain, 
-  num.trees       = 1000,
-  seed            = seednr,
-  probability     = TRUE,
-  importance      = 'impurity'
-)
-
-PSC_PSCUC_predictedmodel <- predict(PSC_PSCUC_rfmodel, PSC_PSCUC_rftest, type="response")
-# PSC_PSCUC_predicted <- colnames(data.table(PSC_PSCUC_predictedmodel$predictions))[max.col(data.table(PSC_PSCUC_predictedmodel$predictions),ties.method="first")]
-
-# table(PSC_PSCUC_rftest$Diagnose,PSC_PSCUC_predicted)
-
-PSC_PSCUC_predicted <- as.data.table(PSC_PSCUC_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-
-# #evaluate
-PSC_PSCUC_optCutOff <- optimalCutoff(PSC_PSCUC_rftest[[PSC_PSCUC_Resultitem]], PSC_PSCUC_predicted, optimiseFor = "Both")[1]
-PSC_PSCUC_misClassErrorResult <- misClassError(PSC_PSCUC_rftest[[PSC_PSCUC_Resultitem]], PSC_PSCUC_predicted)#, threshold = PSC_PSCUC_optCutOff)
-PSC_PSCUC_ROCplotResult <- plotROC(PSC_PSCUC_rftest[[PSC_PSCUC_Resultitem]], PSC_PSCUC_predicted, returnSensitivityMat=T)
-
-concordanceResult <- Concordance(PSC_PSCUC_rftest[[PSC_PSCUC_Resultitem]], PSC_PSCUC_predicted)
-sensitivityResult <- sensitivity(PSC_PSCUC_rftest[[PSC_PSCUC_Resultitem]], PSC_PSCUC_predicted, threshold = PSC_PSCUC_optCutOff)
-specificityResult <- specificity(PSC_PSCUC_rftest[[PSC_PSCUC_Resultitem]], PSC_PSCUC_predicted, threshold = PSC_PSCUC_optCutOff)
-confusionMatrixResult <- confusionMatrix(PSC_PSCUC_rftest[[PSC_PSCUC_Resultitem]], PSC_PSCUC_predicted, threshold = PSC_PSCUC_optCutOff)
-confusionMatrixResult
-
-PSC_UC_variable_importance <- data.table(feature=names(PSC_PSCUC_rfmodel$variable.importance), importance=PSC_PSCUC_rfmodel$variable.importance)
-head(PSC_UC_variable_importance[order(PSC_UC_variable_importance$importance, decreasing=T),],25)
-PSC_UC_mostimpactfeature <- PSC_UC_variable_importance[PSC_UC_variable_importance$importance==max(PSC_UC_variable_importance$importance),feature]
-
-ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=UBASH3A))+
-  geom_jitter()+#geom_boxplot()+
-  scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
+# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=UBASH3A))+
+#   geom_jitter()+#geom_boxplot()+
+#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 
 # PSCUC vs UC, no CON, no PSC ###########
-set.seed(seednr)
-PSCUC_UC_splitted <- rsample::initial_split(merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 1,-c("rn","Cohort")], 0.5)#,"DiagnoseCohort"
-PSCUC_UC_rftrain <- training(PSCUC_UC_splitted)
-PSCUC_UC_rftest <- testing(PSCUC_UC_splitted)
+PSCUC_UC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 1,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
 
-#Convert Diagnose into a factor: 0=PSC/UC, 1=UC
-PSCUC_UC_rftrain$Diagnose <- droplevels(PSCUC_UC_rftrain$Diagnose)
-levels(PSCUC_UC_rftrain$Diagnose) <- c(0,1)
+pROC::auc(PSCUC_UC_Diagnose_results$pROC_object)
 
-PSCUC_UC_rftest$Diagnose <- droplevels(PSCUC_UC_rftest$Diagnose)
-levels(PSCUC_UC_rftest$Diagnose) <- c(0,1)
+# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
+#   geom_jitter()+
+#   geom_boxplot()+
+#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 
+# PSCUC+PSC vs UC; no CON###########
+#Diagnose: 0=Control, 1=PSC, 2=PSCUC, 3=UC
+PSCUCPSC_merged_RF <- merged_RF[merged_RF$Diagnose != 0,-c("rn","Cohort")]
+PSCUCPSC_merged_RF$Diagnose <- droplevels(PSCUCPSC_merged_RF$Diagnose)
+#merge PSC and PSCUC to one level; PSC+PSCUC = 0; UC = 1:
+levels(PSCUCPSC_merged_RF$Diagnose) <- c("0","0","1")
+#PSCUCPSC_merged_RF$Diagnose <- droplevels(PSCUCPSC_merged_RF$Diagnose)
 
-#check whether RF can distinguish between Cohorts in our merged dataset (it should not!)
-PSCUC_UC_Resultitem <- "Diagnose"
+PSCUCPSC_UC_Diagnose_results <- performML(dataset = PSCUCPSC_merged_RF,
+                                          splitfactor = 0.5, 
+                                          outcome_column = "Diagnose",
+                                          seed = seednr)
 
-PSCUC_UC_rfmodel <- ranger(
-  formula         = Diagnose ~ .,
-  data            = PSCUC_UC_rftrain,
-  num.trees       = 1000,
-  seed            = seednr,
-  probability     = TRUE,
-  importance      = 'impurity'
-)
+pROC::auc(PSCUCPSC_UC_Diagnose_results$pROC_object)
 
-PSCUC_UC_predictedmodel <- predict(PSCUC_UC_rfmodel, PSCUC_UC_rftest, type="response")
+# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
+#   geom_jitter()+
+#   geom_boxplot()+
+#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 
-# PSCUC_UC_predicted <- colnames(data.table(PSCUC_UC_predictedmodel$predictions))[max.col(data.table(PSCUC_UC_predictedmodel$predictions),ties.method="first")]
+# PSCUC+PSC vs CON; no UC###########
+#Diagnose: 0=Control, 1=PSC, 2=PSCUC, 3=UC
+PSCUCPSC_CON_merged_RF <- merged_RF[merged_RF$Diagnose != 3,-c("rn","Cohort")]
+PSCUCPSC_CON_merged_RF$Diagnose <- droplevels(PSCUCPSC_CON_merged_RF$Diagnose)
+#merge PSC and PSCUC to one level; PSC+PSCUC = 1; Con = 0:
+levels(PSCUCPSC_CON_merged_RF$Diagnose) <- c("0","1","1")
+#PSCUCPSC_CON_merged_RF$Diagnose <- droplevels(PSCUCPSC_merged_RF$Diagnose)
 
-# table(PSCUC_UC_rftest$Diagnose,PSCUC_UC_predicted)
+PSCUCPSC_CON_Diagnose_results <- performML(dataset = PSCUCPSC_CON_merged_RF,
+                                          splitfactor = 0.5, 
+                                          outcome_column = "Diagnose",
+                                          seed = seednr)
 
-PSCUC_UC_predicted <- as.data.table(PSCUC_UC_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
+pROC::auc(PSCUCPSC_CON_Diagnose_results$pROC_object)
 
-# #evaluate
-PSCUC_UC_optCutOff <- optimalCutoff(PSCUC_UC_rftest[[PSCUC_UC_Resultitem]], PSCUC_UC_predicted, optimiseFor = "Both")[1]
-PSCUC_UC_misClassErrorResult <- misClassError(PSCUC_UC_rftest[[PSCUC_UC_Resultitem]], PSCUC_UC_predicted)#, threshold = PSCUC_UC_optCutOff)
-PSCUC_UC_ROCplotResult <- plotROC(PSCUC_UC_rftest[[PSCUC_UC_Resultitem]], PSCUC_UC_predicted, returnSensitivityMat=T)
-
-concordanceResult <- Concordance(PSCUC_UC_rftest[[PSCUC_UC_Resultitem]], PSCUC_UC_predicted)
-sensitivityResult <- sensitivity(PSCUC_UC_rftest[[PSCUC_UC_Resultitem]], PSCUC_UC_predicted, threshold = PSCUC_UC_optCutOff)
-specificityResult <- specificity(PSCUC_UC_rftest[[PSCUC_UC_Resultitem]], PSCUC_UC_predicted, threshold = PSCUC_UC_optCutOff)
-confusionMatrixResult <- confusionMatrix(PSCUC_UC_rftest[[PSCUC_UC_Resultitem]], PSCUC_UC_predicted, threshold = PSCUC_UC_optCutOff)
-confusionMatrixResult
-
-PSC_UC_variable_importance <- data.table(feature=names(PSCUC_UC_rfmodel$variable.importance), importance=PSCUC_UC_rfmodel$variable.importance)
-head(PSC_UC_variable_importance[order(PSC_UC_variable_importance$importance, decreasing=T),],25)
-PSC_UC_mostimpactfeature <- PSC_UC_variable_importance[PSC_UC_variable_importance$importance==max(PSC_UC_variable_importance$importance),feature]
-
-ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
-  geom_jitter()+
-  geom_boxplot()+
-  scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
-
-# CEMiTool ###########
+# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
+#   geom_jitter()+
+#   geom_boxplot()+
+#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
+# CEMiTool #####
 #create an expressionmatrix dataframe for CEMItool:
 merged_RF_expressionmatrix <- transpose_datatable(merged_RF[,-c("Diagnose", "Cohort")])
 merged_RF_expressionmatrix <- data.frame(merged_RF_expressionmatrix,row.names = merged_RF_expressionmatrix$rn)[,-1]
@@ -639,7 +484,7 @@ merged_RF_expressionmatrix <- data.frame(merged_RF_expressionmatrix,row.names = 
 cem_merged_RF <- CEMiwrapper(expressionmatrix=merged_RF_expressionmatrix, ID=merged_metadata$SampleID, Groups=merged_metadata$Diagnose, reportname=paste0("PSC_PSCUC_UC","_Diagnose"), applyfiltering = FALSE)
 genesinput <- data.table(cem_merged_RF@module)[modules == "M2",]$genes
 # save.image(file="performedanalysis.RData")
-
+# Cell Blueprints ####
 #Cell Blueprints for every module created from cemitools:
 enrichmentslist <- list()
 for (x in unique(cem_merged_RF@module$modules)){
@@ -654,8 +499,9 @@ for (x in unique(cem_merged_RF@module$modules)){
 
 enrichment_df <- data.table(bind_rows(enrichmentslist, .id = "column_label")) %>% pivot_wider(names_from = celltype, values_from = enrichment) %>% as.data.table() %>% as.matrix(., rownames="column_label")
 
+#M3C::M3C(dcast(melt(data.table(rn=rownames(enrichment_df),enrichment_df),id.vars="rn"), variable ~ rn)[,-"variable"], clusteralg = "km",cores = 4)
 
-library(ComplexHeatmap)
+
 
 htmp <- Heatmap(enrichment_df, 
                 name="Z-score",
@@ -663,6 +509,9 @@ htmp <- Heatmap(enrichment_df,
                   legend_direction = "horizontal", 
                   legend_width = unit(6, "cm")),
                 height = unit(10, "cm"),
+                row_km = 3,
+                row_km_repeats = 10,
+                row_names_side = "left",
                 width = unit(14, "cm"),
                 column_names_rot = 45, 
                 # column_names_max_height = unit(2, "cm"),
@@ -670,3 +519,61 @@ htmp <- Heatmap(enrichment_df,
                 column_names_gp = gpar(fontsize = 10)
 )
 draw(htmp, heatmap_legend_side="top")
+
+# topGO function results #####
+#use topgo function to evaluate the biological function of features, chosen by RF:
+res <- results(dds,  contrast=c("Diagnose","UC","Control"),tidy=T)
+
+topGo_object <- topGO_enrichment(genelist = PSCUC_UC_Diagnose_results$variable_importance[1:1000,]$feature, statistical_test = "ks.ties", weights = PSCUC_UC_Diagnose_results$variable_importance[1:1000,]$importance, #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
+                              DESeq_result = res, match_by_expression = TRUE)
+topGo_object <- topGO_enrichment(genelist = PSCUC_UC_Diagnose_results$variable_importance[1:100,]$feature, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
+                              DESeq_result = res, match_by_expression = TRUE, ontology_type = "MF")
+
+
+
+
+#
+# Analysis Results ####
+
+# DEseq2 results:
+#PSC vs CON
+res_PSC <- results(dds,  contrast=c("Diagnose","PSC","Control"))
+resLFC_PSC <- lfcShrink(dds, coef=resultsNames(dds)[2], type="apeglm")
+
+#UC vs CON
+res_UC <- results(dds,  contrast=c("Diagnose","UC","Control"))
+resLFC_UC <- lfcShrink(dds, coef="Diagnose_UC_vs_Control", type="apeglm")
+
+#UC vs PSC
+res_UC_PSC <- results(dds,  contrast=c("Diagnose","UC","PSC"))
+resLFC_UC_PSC <- lfcShrink(dds, coef="Diagnose_UC_vs_PSC", type="apeglm")
+
+#PSCUC vs PSC
+res_PSCUC_PSC <- results(dds,  contrast=c("Diagnose","PSCUC","PSC"))
+resLFC_PSCUC_PSC <- lfcShrink(dds, coef="Diagnose_PSCUC_vs_PSC", type="apeglm")
+
+# Random Forest results:
+#Validations:
+Planell_CON_UC_Diagnose_results
+Mo_CON_UC_Diagnose_results
+Ostrowski_CON_UC_Diagnose_results
+
+#Our Dataset:
+CON_UC_Diagnose_results
+
+PSC_UC_COHORT_results
+PSC_UC_Diagnose_results
+PSCUC_UC_Diagnose_results
+PSC_PSCUC_Diagnose_results
+PSC_CONTROL_Diagnose_results
+PSCUCPSC_UC_Diagnose_results
+PSCUCPSC_CON_Diagnose_results
+
+#Cemitool
+cem_merged_RF
+
+#Blueprints
+draw(htmp, heatmap_legend_side="top")
+
+#TopGO
+topGo_object

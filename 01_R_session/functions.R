@@ -1,7 +1,6 @@
 require(data.table)
 require(tidyverse)
 require(DESeq2)
-# require(pheatmap)
 # require(rvcheck)
 require(CEMiTool)
 # require(M3C)
@@ -12,8 +11,8 @@ require(rmarkdown)
 # require(ggplotify)
 # require(VennDiagram)
 # require(extrafont)
-# require(SCORPIUS)
-#########FUNCTIONS##########
+
+# FUNCTIONS ####
 getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
   require(data.table)
   cohorttable <- fread(corhorttablelocation, header=T)
@@ -172,7 +171,6 @@ ddsofallknownseverity <- function(meta=metadata, countmatrix=rawcounts, batch="P
   dds <- DESeq(dds)
   return(dds)
   }
-
 
 getCohortsVSD <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
   require(data.table)
@@ -445,7 +443,6 @@ setMethod('generate_report', signature('CEMiTool'),
             rmarkdown::render(rmd,output_file = nameofcohort, output_dir=directory, intermediates_dir=directory, quiet=TRUE, ...)
           })
 
-
 CEMiwrapper <- function(expressionmatrix=assay(vsd), ID=metadata$SampleID, Groups=metadata$selectedgenesm3c, gmt_location=gmt_file, reportname="report", beta20=FALSE, applyfiltering=TRUE, ...){
   if(isFALSE(beta20)){
     foreach::registerDoSEQ()
@@ -584,7 +581,7 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL){
   
   # Choose metrics
   
-  my_metrics <- metric_set(roc_auc, accuracy, sens, spec, precision, recall)
+  my_metrics <- metric_set(yardstick::roc_auc, yardstick::accuracy, yardstick::sens, yardstick::spec, yardstick::precision, yardstick::recall)
   
   # Tuning
   
@@ -608,19 +605,20 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL){
   return(tuned_model)
 }
 
-
-# dataset = merged_RF[merged_RF$Diagnose == 0,-c("rn","Diagnose")]
+# 
+# dataset = reduced2_merged_RF[,-c("rn")]
+# testing_dataset = reduced2_Planell_RF
 # splitfactor = 0.5
-# outcome_column = "Cohort"
+# outcome_column = "Diagnose"
 # seed = seednr
 #make sure outcome_col is a binary factor, there is no sanity test yet in place for this.
 performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome_column=NULL,seed=123){
   require(rsample)
   require(pROC)
-  
-  dataset[[outcome_column]] <- droplevels(dataset[[outcome_column]])
-  levels(dataset[[outcome_column]]) <- c(0,1
-  )
+  require(InformationValue)
+    
+  dataset[[outcome_column]] <- base::droplevels(dataset[[outcome_column]])
+  levels(dataset[[outcome_column]]) <- c(0,1)
   set.seed(seednr)
   splitted <- rsample::initial_split(dataset, splitfactor)
   rftrain <- training(splitted)
@@ -628,10 +626,42 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   if(is.null(testing_dataset)){testing_dataset <- rftest}
   Resultitem <- outcome_column
   
+  
+
   tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
   
   
   # predicted_train <- predict(tuned_model, rftrain, type = "prob")
+  predicted_test <- predict(tuned_model, testing_dataset, type = "prob")
+  predicted <- as.data.table(predicted_test)[,2]%>%unlist()%>%as.vector()%>%as.numeric()
+  
+  optCutOff <- InformationValue::optimalCutoff(testing_dataset[[Resultitem]], predicted, optimiseFor = "Both")[1]
+  
+  misClassErrorResult <- misClassError(testing_dataset[[Resultitem]], predicted)#, threshold = optCutOff)
+  
+  # ROCplotResult <- plotROC(rftest[[Resultitem]], predicted, returnSensitivityMat=T)
+  proc_predicted_test <- predict(tuned_model, testing_dataset, type= "prob")[,2] %>% unlist() %>% as.vector()
+  proc_predicted_test_integer <- as.integer(ifelse(proc_predicted_test>=optCutOff,1,0))
+  
+  realvalue <- as.integer(testing_dataset[[Resultitem]])-1
+  rocobject <- pROC::roc(realvalue ~ proc_predicted_test_integer)
+  
+  concordanceResult <- Concordance(testing_dataset[[Resultitem]], predicted)
+  sensitivityResult <- InformationValue::sensitivity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  specificityResult <- InformationValue::specificity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  confusionMatrixResult <- confusionMatrix(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  # confusionMatrixResult
+  variable_importance <- data.table(feature=names(extract_fit_parsnip(tuned_model)$fit$variable.importance), importance=extract_fit_parsnip(tuned_model)$fit$variable.importance)
+  variable_importance <- variable_importance[order(variable_importance$importance,decreasing = T),]
+  # top25 <- head(variable_importance[order(variable_importance$importance, decreasing=T),],25)
+  return_list <- list(rocobject,tuned_model,concordanceResult,sensitivityResult,specificityResult,confusionMatrixResult,variable_importance, rftrain, rftest)
+  names(return_list) <- c("pROC_object","tuned_model","concordanceResult","sensitivityResult","specificityResult","confusionMatrixResult","variable_importance","train_df","test_df")
+  return(return_list)
+}
+
+predictwithatunedmodel <- function(tuned_model=NULL,testing_dataset=NULL,outcome_column = NULL,seed = 123){
+  require(pROC)
+  Resultitem <- outcome_column
   predicted_test <- predict(tuned_model, testing_dataset, type = "prob")
   predicted <- as.data.table(predicted_test)[,2]%>%unlist()%>%as.vector()%>%as.numeric()
   
@@ -655,4 +685,145 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   return_list <- list(rocobject,tuned_model,concordanceResult,sensitivityResult,specificityResult,confusionMatrixResult,variable_importance)
   names(return_list) <- c("pROC_object","tuned_model","concordanceResult","sensitivityResult","specificityResult","confusionMatrixResult","variable_importance")
   return(return_list)
+}
+
+topGO_enrichment <- function(genelist = NULL, 
+                             weights = NULL,
+                             weight_threshold = 0,
+                             statistical_test="Fisher", 
+                             algorithm_topGO = "classic",
+                             DESeq_result = NULL,
+                             match_by_expression = FALSE,
+                             gene_background = NULL,
+                             ontology_type = "BP",
+                             draw_plot = FALSE,
+                             output_dir = "output/", 
+                             debug_mode = FALSE) {
+  # this function is purposed to take a list of genes, which is then analysed by the TOPGO algorithm using GO libraries
+  # desired output is a tabular enrichment result
+  # also, if the user wishes, a pdf containing a graph of the enrichment hierarchy is written
+  # genelist  character vector coontaining gene names. If gene_background is given, genes not in genelist will be ignored.
+  # If DESeq_result is given, genes not occuring in the DESeq-assay table will be ignored.
+  # weigths are assumed to increasing with importance: Gene A: 5,  Gene B: 2.3: Gene A is more important and will be ranked higher
+  # by the Kolmogorov-Smirnov test.
+  
+  if (debug_mode == TRUE) {
+    #this is to intialize for a test run
+    genelist <- c("S100A12","ETS1","ACTB")
+    weights <- c(2,1,0.8)
+    gene_background <- c("VSTM1","TARM1","OSCAR","NDUFA3","TFPT","PRPF31","AC012314.8","CNOT3","LENG1","TMC4","MBOAT7","TSEN34","S100A12","ETS1","ACTB")
+  }
+  # checks
+  stopifnot( "no genelist provided" = !is.null(genelist) )
+  stopifnot( "weights and genelist length differ" = is.null(weights) | length(weights) == length(genelist) )
+  if (is.null(DESeq_result) & is.null(gene_background)) {
+    stop("TopGO needs a gene universe (background). Provide either DESeq_result or gene_background.")
+  }
+  if ( !is.null(DESeq_result) & !is.null(gene_background) ) {
+    message("DESeq_result and gene_background are both input. Using gene_background...")
+  }
+  stopifnot("library missing" = require(DESeq2) & require(topGO) & require(genefilter) & require(geneplotter) & require(tidyverse) & require(data.table) & require(org.Hs.eg.db))
+  
+  
+  # to generate the gene background, prefer gene_background if provided
+  # else if no expression matching is wished, use any expressed gene from DESeq2 result
+  # else, calculate a background based on similarly expressed genes
+  if ( !is.null(gene_background)) {
+    gene_background <- gene_background
+    backG <- NULL
+  } else {
+    
+    if (match_by_expression == FALSE) {
+      DESeq_result <- subset(DESeq_result, DESeq_result$baseMean > 0) 
+      gene_background <- DESeq_result$row
+      backG <- NULL
+    } else {
+      DESeq_result <- subset(DESeq_result, DESeq_result$baseMean > 0) 
+      DESeq_result <- subset(DESeq_result, !is.na(DESeq_result$row) & !DESeq_result$row == "" )
+      rownames(DESeq_result) <- DESeq_result$row
+      gene_background <- rownames(DESeq_result)
+      overallBaseMean <- as.matrix(DESeq_result[, "baseMean", drop = F])
+      rownames(overallBaseMean) <- rownames(DESeq_result)
+      sig_idx <- match(genelist, rownames(overallBaseMean))
+      
+      backG <- c()
+      
+      for(i in sig_idx){
+        ind <- genefinder(overallBaseMean, i, 10, method = "manhattan")[[1]]$indices
+        backG <- c(backG, ind)
+        
+      }
+      
+      backG <- unique(backG)
+      backG <- rownames(overallBaseMean)[backG]
+      backG <- setdiff(backG, genelist)
+      
+      multidensity( list( 
+        all= log2(overallBaseMean[,"baseMean"]) ,
+        foreground =log2(overallBaseMean[genelist, "baseMean"]), 
+        background =log2(overallBaseMean[backG, "baseMean"])), 
+        xlab="log2 mean normalized counts", main = "Matching for enrichment analysis")
+      
+    }
+    
+  }
+  
+  
+  if (!is.null(backG)) {
+    inUniverse <- gene_background %in% c(genelist, backG)
+    inSelection <- gene_background %in% genelist 
+  } else {
+    inUniverse <- gene_background %in% gene_background
+    inSelection <- gene_background %in% genelist
+  }
+  # create a named vector with either weights or factor values
+  
+  if ( !is.null(weights) ) {
+    alg <- as.numeric( inSelection[inUniverse] )
+    names(alg) <- gene_background[inUniverse]
+    alg[genelist] <- weights
+  } else {
+    alg <- factor( as.integer( inSelection[inUniverse] ) )
+    names(alg) <- gene_background[inUniverse]
+  }
+  
+  # function to pick genes which are used when weights are given. 
+  
+  geneSelFunction <- function(allScore) {
+    return(allScore > weight_threshold)
+  }
+  ## prepare topGO object
+  tgd <- new( "topGOdata", ontology = ontology_type, allGenes = alg, 
+              geneSel = ifelse( !is.null(weights), geneSelFunction, NULL),
+              nodeSize=5,
+              annot=annFUN.org, mapping="org.Hs.eg.db", ID = "symbol" )
+  
+  ## run tests
+  #resultTopGO.elim <- runTest(tgd, algorithm = "elim", statistic = "Fisher" )
+  resultTopGO <- runTest(tgd, algorithm = algorithm_topGO, statistic = statistical_test , scoreOrder = "decreasing") #scoreOrder is handdown for the ks test
+  
+  ## look at results
+  if(length(nodes(graph(tgd))) < 200){
+    # tab <- GenTable( tgd, Fisher.elim = resultTopGO.elim, 
+    #                  Fisher.classic = resultTopGO.classic,
+    #                  orderBy = "Fisher.elim" , topNodes = length(nodes(graph(tgd))))
+    tab <- GenTable( tgd, 
+                     test.pvalue = resultTopGO,
+                     orderBy = "Fisher.elim" , topNodes = length(nodes(graph(tgd))))
+  }else{
+    # tab <- GenTable( tgd, Fisher.elim = resultTopGO.elim, 
+    #                  Fisher.classic = resultTopGO.classic,
+    #                  orderBy = "Fisher.elim" , topNodes = 200)
+    tab <- GenTable( tgd, 
+                     test.pvalue = resultTopGO,
+                     orderBy = "Fisher.elim" , topNodes = 200)
+  }
+  
+  
+  #printGraph(tgd, resultTopGO.elim, firstSigNodes = 5, fn.prefix = output_dir, useInfo = "all", pdfSW = TRUE)
+  if(draw_plot == TRUE) 
+  { printGraph(tgd, resultTopGO.classic, firstSigNodes = 15, fn.prefix = output_dir, useInfo = "all", pdfSW = TRUE) }
+  
+  
+  return(tab)
 }
