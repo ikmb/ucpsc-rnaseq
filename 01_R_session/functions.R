@@ -679,7 +679,7 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   proc_predicted_test_integer <- as.integer(ifelse(proc_predicted_test>=optCutOff,1,0))
   
   realvalue <- as.integer(testing_dataset[[Resultitem]])-1
-  rocobject <- pROC::roc(realvalue ~ proc_predicted_test_integer)
+  rocobject <- pROC::roc(realvalue ~ proc_predicted_test)#proc_predicted_test_integer
   
   concordanceResult <- Concordance(testing_dataset[[Resultitem]], predicted)
   sensitivityResult <- InformationValue::sensitivity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
@@ -705,7 +705,7 @@ predictwithatunedmodel <- function(tuned_model=NULL,testing_dataset=NULL,outcome
   misClassErrorResult <- misClassError(testing_dataset[[Resultitem]], predicted)#, threshold = optCutOff)
   
   # ROCplotResult <- plotROC(rftest[[Resultitem]], predicted, returnSensitivityMat=T)
-  proc_predicted_test <- predict(tuned_model, testing_dataset) %>% unlist() %>% as.vector() #%>% as.integer()
+  proc_predicted_test <- predict(tuned_model, testing_dataset, type=c("prob"))[,1] %>% unlist() %>% as.vector() #%>% as.integer()
   realvalue <- as.integer(testing_dataset[[Resultitem]])-1
   rocobject <- pROC::roc(realvalue ~ proc_predicted_test)
   

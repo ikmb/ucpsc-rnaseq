@@ -165,3 +165,27 @@ topGO_enrichment(genelist = sign_PSC_CON, statistical_test = "Fisher", #gene_bac
 # plot(res_PSCUC_PSC_untidy$log2FoldChange, mcols(dds)$maxCooks)
 
 
+Planell_CON_UC_Diagnose_results
+Mo_CON_UC_Diagnose_results
+Ostrowski_CON_UC_Diagnose_results
+
+Ostrowski_CON_PSC_Diagnose_results
+PSCUCPSC_CON_Diagnose_results
+PSC_CONTROL_Diagnose_results
+
+#Our Dataset:
+CON_UC_Diagnose_results
+PSC_UC_COHORT_results
+PSC_UC_Diagnose_results
+PSCUC_UC_Diagnose_results
+PSC_PSCUC_Diagnose_results
+
+PSCUCPSC_UC_Diagnose_results
+
+
+pROC::auc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
+pROC::ggroc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
+pROC::ci.auc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
+
+
+

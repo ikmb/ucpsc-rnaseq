@@ -14,13 +14,13 @@ library(RColorBrewer)
 # library(ggpubr)
 # library(ggridges)
 # library(ggplotify)
-# library(extrafont)
-# library(reshape2)
-# library(viridis)
 # library(ggrepel)
 # library(ggvenn)
 library(rsample)      # data splitting 
 # library(randomForest) # basic implementation
+# library(extrafont)
+# library(reshape2)
+# library(viridis)
 library(ranger)
 library(Information)
 library(InformationValue)
@@ -196,7 +196,7 @@ validation_z_con_stabilised <- transpose_datatable(validation_z_con_stabilised)
 
 # Mo RF for validation Model####
 Mo_genefeatures <- c("rn",rownames(assay(vsd_validation)))
-sum(colnames(filtered_merged_RF) %in% Mo_genefeatures)
+#sum(colnames(filtered_merged_RF) %in% Mo_genefeatures)
 #we do not find all gene features from our dataset in the mo dataset, so we intersect, rerun RF on our merged dataset and then try to predict outcome in Mo
 Mo_dataset <- data.table(validation_z_con_stabilised, Diagnose=vsd_validation$Diagnose)
 
@@ -258,7 +258,7 @@ Planell_dataset <- data.table(validation2_z_con_stabilised, Diagnose=vsd_validat
 reduced2_merged_RF <- filtered_merged_RF[,intersect(colnames(Planell_dataset), colnames(filtered_merged_RF)),with=F]
 reduced2_Planell_RF <- Planell_dataset[,intersect(colnames(Planell_dataset), colnames(filtered_merged_RF)),with=F]
 
-levels(reduced2_Planell_RF[["Diagnose"]]) <- c(0,1)
+levels(reduced2_Planell_RF[["Diagnose"]]) <- c(0L,1L)
 
 Planell_CON_UC_Diagnose_results <- performML(dataset = reduced2_merged_RF[,-c("rn")],testing_dataset = reduced2_Planell_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
 reducedforplanell_CON_UC_Diagnose_results <- predictwithatunedmodel(tuned_model = Planell_CON_UC_Diagnose_results$tuned_model, testing_dataset = Planell_CON_UC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
@@ -270,7 +270,7 @@ pROC::auc(reducedforplanell_CON_UC_Diagnose_results$pROC_object)
 
 
 
-# Ostrowski validation Preparation####
+# Ostrowski UC validation Preparation####
 validation3_cohortname<- "Ostrowski"
 validation3cohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
                            Mo_UC="Diagnose",
@@ -305,7 +305,7 @@ colnames(validation3_z_con_stabilised) <- c("rn",rownames(assay(vsd_validation3)
 
 
 
-# Ostrowski RF for validation3 Model####
+# Ostrowski UC RF for validation3 Model####
 Ostrowski_genefeatures <- c("rn",rownames(assay(vsd_validation3)))
 sum(colnames(filtered_merged_RF) %in% Ostrowski_genefeatures)
 #we do not find all gene features from our dataset in the mo dataset, so we intersect, rerun RF on our merged dataset and then try to predict outcome in Mo
@@ -324,78 +324,90 @@ pROC::auc(Ostrowski_CON_UC_Diagnose_results$pROC_object)
 # pROC::ci.auc(Ostrowski_CON_UC_Diagnose_results$pROC_object)
 #validation with own test dataset
 pROC::auc(reducedforOstrowski_CON_UC_Diagnose_results$pROC_object)
-# LightGMB (NOT USED)####
-# set.seed(seednr)
-# reduced_splitted <- rsample::initial_split(reduced_merged_RF[,-"rn"], 0.5)
-# reduced_rftrain <- training(reduced_splitted)
-# reduced_rftest <- testing(reduced_splitted)
-# # levels(rftrain$Diagnose) <- c("0","1","1")
-# # levels(rftest$Diagnose) <- c("0","1","1")
-# levels(reduced_Mo_RF$Diagnose) <- c("0","1")
-# #rftest$DiagnoseCohort <- factor(rftest$DiagnoseCohort)
-# reduced_Resultitem <- "Diagnose"
-# #case.weights calculation
-# reduced_training_sample_weights <- case_when(reduced_rftrain$Diagnose == "0" ~ 1/sum(reduced_rftrain$Diagnose=="0"),
-#                                              reduced_rftrain$Diagnose == "1" ~ 1/sum(reduced_rftrain$Diagnose=="1"),
-#                                              reduced_rftrain$Diagnose == "2" ~ 1/sum(reduced_rftrain$Diagnose=="2"),
-#                                              reduced_rftrain$Diagnose == "3" ~ 1/sum(reduced_rftrain$Diagnose=="3"))
+
+# Ostrowski PSC cohort validation  preparation ####
 # 
-# reduced_dtrain <- lgb.Dataset(as.matrix(reduced_rftrain[,-"Diagnose"]), label = as.integer(as.factor(reduced_rftrain$Diagnose))-1)
-# reduced_model <- lgb.train(
-#   params = list(
-#     objective = "binary", 
-#     metric = "auc",
-#     boosting = "goss",
-#     #feature_fraction = 0.5,
-#     feature_fraction_bynode = 0.5
-#   )
-#   , data = reduced_dtrain
-# )
+
+validation3_cohortname<- "Ostrowski_PSC"
+validation3cohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
+                           Mo_UC="Diagnose",
+                           Planell="Endoscopic\nMayo Score",
+                           Ostrowski_PSC="PSC")
+vsd_validation3 <- getCohortsVSD(cohortname=validation3_cohortname)
+severityscale <- validation3cohorts[[validation3_cohortname]]
+dds_validation3 <- getCohortsDDS(cohortname=validation3_cohortname)
+vsd_validation3$severity <- vsd_validation3$Diagnose
+vsd_validation3$severity[is.na(vsd_validation3$severity)] <- "Control"  
+
+# ggplot(as.data.table(t(assay(vsd_validation2)[,])),aes(x=colData(vsd_validation2)$severity,y=S100A6))+geom_boxplot()+geom_jitter(width=0.05)
+
+# res_validation2 <- results(dds_validation2, c("Diagnose","Control","UC"),tidy=TRUE)
+# res_validation2[res_validation2$row %in% top25$feature,]
+
+validation3_controls <- ifelse(dds_validation3$Diagnose == "Control",TRUE,FALSE)
+validation3_vst_counts <- data.table((assay(vsd_validation3)[,]))
+
+
+validation3_z_con_stabilised <- data.table(apply(validation3_vst_counts,
+                                                 1,function(x){y <- x[validation3_controls];z <- y[remove_outlier_filter(y)];
+                                                 (x-mean(y))/sd(z)}),
+                                           keep.rownames=TRUE)
+
+dds_Ostrowski_PSC <- results(dds_validation3, contrast = c("Diagnose","PSC", 'Control'),tidy=T) %>% as.data.table()
+
+
+colnames(validation3_z_con_stabilised) <- c("rn",rownames(assay(vsd_validation3)))
+
+# ggplot(validation2_z_con_stabilised,aes(x=colData(vsd_validation2)$severity,y=S100A12))+geom_boxplot()+geom_jitter(width=0.05)
+
+
+
+# Ostrowski PSC RF for validation2 Model####
+
+
+# #Convert Diagnose into a factor: 0=Control, 1=PSC, 2=PSCUC, 3=UC
+# merged_RF$Diagnose  <- factor(merged_RF$Diagnose )
+# levels(merged_RF$Diagnose) <- c("0","1","2", "3")
 # 
-# reduced_dtest <- lgb.Dataset(as.matrix(reduced_rftest[,-"Diagnose"]), label = as.integer(as.factor(rftest$Diagnose))-1)
+# merged_RF$Cohort  <- factor(merged_RF$Cohort )
 # 
-# reduced_predictions <- predict(reduced_model,as.matrix(reduced_rftest[,-"Diagnose"]))
-# 
-# table(reduced_rftest$Diagnose,round(reduced_predictions)-1)
-# plotROC(reduced_rftest[[reduced_Resultitem]], reduced_predictions, returnSensitivityMat=T)
-# lgb.importance(reduced_model, percentage = TRUE)
-# # cumsum(lgb.importance(reduced_model, percentage = TRUE)$Gain)
-# # cumsum(lgb.importance(reduced_model, percentage = TRUE)$Frequency)
-# #repeat for Mo
-# reduced_Mo_predictions <- predict(reduced_model,as.matrix(reduced_Mo_RF[,-c("rn","Diagnose")]))
-# reduced_Mo_predictions <- round(reduced_Mo_predictions)
-# #reduced_predictedmodel <- predict(reduced_rfmodel, reduced_Mo_RF, type="response")
-# #reduced_Mo_predicted <- as.data.table(reduced_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-# reduced_optCutOff <- optimalCutoff(reduced_Mo_RF[[reduced_Resultitem]], reduced_Mo_predictions, optimiseFor = "Both")[1]
-# ROCplotResult <- plotROC(reduced_Mo_RF[[reduced_Resultitem]], reduced_Mo_predictions, returnSensitivityMat=T)
-# table(reduced_Mo_RF$Diagnose,round(reduced_Mo_predictions))
-# 
-# 
-# #Compare top5 features in boxplots: cohort and validation cohort
-# plot_list <- list()
-# for(gene in top25$feature){
-#   require(ggpubr)
-#   try(
-#     p1 <- ggplot(
-#       data=rbindlist(
-#               list(data.table("expression"=unlist(merged_RF[Cohort == 1,..gene]),
-#                               Diagnose=merged_metadata[merged_metadata$Diagnose %in% c("Control","UC") & merged_metadata$Cohort == 1]$Diagnose,
-#                               Cohort="Our"),
-#                     data.table("expression"=unlist(validation_z_con_stabilised[,..gene]),
-#                                Diagnose=vsd_validation$Diagnose,
-#                                Cohort="Validation")
-#                    )
-#               ),
-#       aes(x=Diagnose,y=expression)
-#       )+geom_boxplot()+facet_wrap(~Cohort)+ ylab(gene)+ stat_compare_means( aes(label = ..p.signif..), 
-#                                                                 label.x = 1.5)
-#   )
-#   
-#   plot_list[[gene]]<- p1
-#   
-#   #ggsave(file=p1,filename = paste0("comparison_",gene,".jpg"))
-# }
-# plot_list
+filtered_merged_RF_PSC <- merged_RF[merged_RF$Cohort == 0,-"Cohort"]
+filtered_merged_RF_PSC$Diagnose <- droplevels(filtered_merged_RF_PSC$Diagnose)
+#0 = Control, 1= PSC
+levels(filtered_merged_RF_PSC$Diagnose) <- c("0", "1","1")#0 = Control, 1= PSC(+PSCUC)
+
+
+
+
+
+
+Ostrowski_genefeatures <- c("rn",rownames(assay(vsd_validation3)))
+sum(colnames(filtered_merged_RF) %in% Ostrowski_genefeatures)
+
+# Remove UC cases from the dataset
+phenodata <- fread(paste0("../00_RawData/",cohorttable[Cohort=="Ostrowski_PSC",Metatable]))
+only_PSC_Control <- phenodata[Diagnose %in% c("PSC","Control"), SampleID]
+validation3_z_con_stabilised <- validation3_z_con_stabilised[which(validation3_z_con_stabilised$rn %in% only_PSC_Control), ]
+Diagnose <- phenodata[SampleID %in% only_PSC_Control, Diagnose]
+Ostrowski_PSC_dataset <- data.table(validation3_z_con_stabilised, Diagnose=Diagnose)
+
+reduced3_merged_RF_PSC <- filtered_merged_RF_PSC[,intersect(colnames(Ostrowski_PSC_dataset), colnames(filtered_merged_RF_PSC)),with=F]
+reduced3_Ostrowski_PSC_RF <- Ostrowski_PSC_dataset[,intersect(colnames(Ostrowski_PSC_dataset), colnames(filtered_merged_RF_PSC)),with=F]
+
+# Transform diagnose column to integer 1,0
+reduced3_Ostrowski_PSC_RF[["Diagnose"]] <- as.factor(reduced3_Ostrowski_PSC_RF[["Diagnose"]])
+levels(reduced3_Ostrowski_PSC_RF[["Diagnose"]]) <- c(0L,1L) 
+# reduced3_Ostrowski_PSC_RF$Diagnose <- as.factor(reduced3_Ostrowski_PSC_RF$Diagnose) %>% as.integer()
+
+Ostrowski_CON_PSC_Diagnose_results <- performML(dataset = reduced3_merged_RF_PSC[,-c("rn")], testing_dataset = reduced3_Ostrowski_PSC_RF, splitfactor = 0.5, outcome_column = "Diagnose", seed = seednr)
+
+reducedforOstrowski_CON_PSC_Diagnose_results <- predictwithatunedmodel(tuned_model = Ostrowski_CON_PSC_Diagnose_results$tuned_model, testing_dataset = Ostrowski_CON_PSC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
+#Auroc for external validation dataset
+pROC::auc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
+# pROC::ci.auc(Planell_CON_UC_Diagnose_results$pROC_object)
+#validation with own test dataset
+pROC::auc(reducedforOstrowski_CON_PSC_Diagnose_results$pROC_object)
+
 
 
 # PSC vs UC model, no controls, no PSCUC ####
@@ -477,6 +489,25 @@ pROC::auc(PSCUCPSC_CON_Diagnose_results$pROC_object)
 #   geom_jitter()+
 #   geom_boxplot()+
 #   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
+# PSCUC vs CON; no UC; no PSC###########
+#Diagnose: 0=Control, 1=PSC, 2=PSCUC, 3=UC
+PSCUC_CON_merged_RF <- merged_RF[!(merged_RF$Diagnose %in% c(3,1)),-c("rn","Cohort")]
+PSCUC_CON_merged_RF$Diagnose <- droplevels(PSCUC_CON_merged_RF$Diagnose)
+#merge PSC and PSCUC to one level; PSC+PSCUC = 1; Con = 0:
+levels(PSCUC_CON_merged_RF$Diagnose) <- c("0","1")
+#PSCUC_CON_merged_RF$Diagnose <- droplevels(PSCUCPSC_merged_RF$Diagnose)
+
+PSCUC_CON_Diagnose_results <- performML(dataset = PSCUC_CON_merged_RF,
+                                        splitfactor = 0.5, 
+                                        outcome_column = "Diagnose",
+                                        seed = seednr)
+
+pROC::auc(PSCUC_CON_Diagnose_results$pROC_object)
+
+# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
+#   geom_jitter()+
+#   geom_boxplot()+
+#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 # CEMiTool #####
 #create an expressionmatrix dataframe for CEMItool:
 merged_RF_expressionmatrix <- transpose_datatable(merged_RF[,-c("Diagnose", "Cohort")])
@@ -545,21 +576,23 @@ resLFC_PSC <- lfcShrink(dds, coef=resultsNames(dds)[2], type="apeglm")
 
 #UC vs CON
 res_UC <- results(dds,  contrast=c("Diagnose","UC","Control"),tidy=T)
-resLFC_UC <- lfcShrink(dds, coef="Diagnose_UC_vs_Control", type="apeglm")
+# resLFC_UC <- lfcShrink(dds, coef="Diagnose_UC_vs_Control", type="apeglm")
 
 #UC vs PSC
 res_UC_PSC <- results(dds,  contrast=c("Diagnose","UC","PSC"),tidy=T)
-resLFC_UC_PSC <- lfcShrink(dds, coef="Diagnose_UC_vs_PSC", type="apeglm")
+# resLFC_UC_PSC <- lfcShrink(dds, coef="Diagnose_UC_vs_PSC", type="apeglm")
 
 #PSCUC vs PSC
 res_PSCUC_PSC <- results(dds,  contrast=c("Diagnose","PSCUC","PSC"),tidy=T)
-resLFC_PSCUC_PSC <- lfcShrink(dds, coef="Diagnose_PSCUC_vs_PSC", type="apeglm")
+# resLFC_PSCUC_PSC <- lfcShrink(dds, coef="Diagnose_PSCUC_vs_PSC", type="apeglm")
 
 # Random Forest results:
 #Validations:
 Planell_CON_UC_Diagnose_results
 Mo_CON_UC_Diagnose_results
 Ostrowski_CON_UC_Diagnose_results
+Ostrowski_CON_PSC_Diagnose_results
+
 
 #Our Dataset:
 CON_UC_Diagnose_results
@@ -571,6 +604,12 @@ PSC_PSCUC_Diagnose_results
 PSC_CONTROL_Diagnose_results
 PSCUCPSC_UC_Diagnose_results
 PSCUCPSC_CON_Diagnose_results
+PSCUC_CON_Diagnose_results
+
+pROC::auc(PSCUC_CON_Diagnose_results$pROC_object)
+pROC::ggroc(PSCUC_CON_Diagnose_results$pROC_object)
+pROC::ci.auc(PSCUC_CON_Diagnose_results$pROC_object)
+
 
 #Cemitool
 cem_merged_RF
@@ -581,146 +620,6 @@ draw(htmp, heatmap_legend_side="top")
 #TopGO
 topGo_object
 
-
-
-# Ostrowski PSC cohort validation  preparation ####
-# 
-# ## this is how the data can be downloaded automatically but sometimes the download fails.
-# ## Therefore, we downloaded the file so it can be read in from disk and be processed with the same code.
-# library(GEOquery)
-# gset <- getGEO("GSE119600", GSEMatrix =TRUE, getGPL=TRUE)
-# 
-# features <- featureData(gset[[1]])
-# pheno <- phenoData(gset[[1]])
-# #if (length(gset) > 1) idx <- grep("GPL13912", attr(gset, "names")) else idx <- 1
-# gset1 <- gset[[idx]]
-# 
-# #get expression matrix. (Genes are in rows, samples in columns)
-# 
-# ex <- exprs(gset$GSE119600_series_matrix.txt.gz)
-# # ### log2 transform with filtering
-# #qx <- as.numeric(quantile(ex, c(0., 0.25, 0.5, 0.75, 0.99, 1.0), na.rm=T))
-# #LogC <- (qx[5] > 100) ||
-# #   (qx[6]-qx[1] > 50 && qx[2] > 0)
-# # if (LogC) { ex[which(ex <= 0)] <- NaN
-# # ex <- log2(ex) }
-# 
-# # put gene names
-# rownames(ex) <- features$ILMN_Gene
-# 
-# #globin genes removal:
-# ex <- ex[!(row.names(ex) %in%  c("HBA1","HBA2","HBB","HBD","HBE1","HBG1","HBG2","HBM","HBQ1","HBZ")),]
-# 
-# # save rownames
-# 
-# rownames <- rownames(ex)
-# 
-# Diagnose <- pheno$characteristics_ch1
-# 
-# # filter for diagnosis
-# 
-# Diagnose <- gsub('condition: primary sclerosing cholangitis', 'PSC', Diagnose)
-# Diagnose <- gsub('condition: ulcerative colitis', 'UC', Diagnose)
-# Diagnose <- gsub('condition: control', 'Control', Diagnose)
-# 
-# #ex_diagnosis <- rbind(ex, Diagnose) %>% as.data.table(keep.rownames = T)
-# 
-# ex_t <- t(ex) %>% as.data.table(keep.rownames = T)
-# #ex_t <- row_to_names(ex_t,row_number = 1) %>% as.data.table(keep.rownames = T)
-# #clean_names(ex_t)
-# 
-# 
-# #filter for only PSC, UC and Controls
-# 
-# Disease <- c('PSC', 'UC', 'Control')
-# 
-# filtered_samples <- ex_t[Diagnose %in% Disease, rn] # gives a vector with sample ID
-# ex_filtered <- ex_t[which(ex_t$rn %in% filtered_samples), ] # returns data.table with filtered IDs.
-# 
-# #transpose the matrix to match the format of the functions
-# 
-# ex_filter <-t(ex_filtered)  %>% as.data.table(keep.rownames = T)
-# ex_filter <- row_to_names(ex_filter,row_number = 1) %>% as.data.table(keep.rownames = T)
-# colnames(ex_filter)[1] <- 'gene_name'
-# 
-# # create a filtered metadata file, with compatible names of the columns
-# 
-# pheno_filtered <- pheno@data
-# pheno_filtered <- pheno_filtered[which(rownames(pheno_filtered) %in% filtered_samples), ]
-# pheno_filtered <- select(pheno_filtered, geo_accession, characteristics_ch1, characteristics_ch1.1)
-# colnames(pheno_filtered)[1] <- 'SampleID'
-# colnames(pheno_filtered)[2] <- 'Condition'
-# colnames(pheno_filtered)[3] <- 'Age group'
-# 
-# Diagnose <- pheno_filtered$Condition
-# rm(pheno_filtered)
-# 
-# phenodata <- cbind(pheno_filtered, Diagnose)
-# phenodata <- select(phenodata, SampleID, Diagnose) %>% as.data.table()
-
-# validation 
-
-validation3_cohortname<- "Ostrowski_PSC"
-validation3cohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
-                           Mo_UC="Diagnose",
-                           Planell="Endoscopic\nMayo Score",
-                           Ostrowski_PSC="PSC")
-vsd_validation3 <- getCohortsVSD(cohortname=validation3_cohortname)
-severityscale <- validation3cohorts[[validation3_cohortname]]
-dds_validation3 <- getCohortsDDS(cohortname=validation3_cohortname)
-vsd_validation3$severity <- vsd_validation3$Diagnose
-vsd_validation3$severity[is.na(vsd_validation3$severity)] <- "Control"  
-
-# ggplot(as.data.table(t(assay(vsd_validation2)[,])),aes(x=colData(vsd_validation2)$severity,y=S100A6))+geom_boxplot()+geom_jitter(width=0.05)
-
-# res_validation2 <- results(dds_validation2, c("Diagnose","Control","UC"),tidy=TRUE)
-# res_validation2[res_validation2$row %in% top25$feature,]
-
-validation3_controls <- ifelse(dds_validation3$Diagnose == "Control",TRUE,FALSE)
-validation3_vst_counts <- data.table((assay(vsd_validation3)[,]))
-
-
-validation3_z_con_stabilised <- data.table(apply(validation3_vst_counts,
-                                                 1,function(x){y <- x[validation3_controls];z <- y[remove_outlier_filter(y)];
-                                                 (x-mean(y))/sd(z)}),
-                                           keep.rownames=TRUE)
-
-dds_Ostrowski_PSC <- results(dds_validation3, contrast = c("Diagnose","PSC", 'Control'),tidy=T) %>% as.data.table()
-
-
-colnames(validation3_z_con_stabilised) <- c("rn",rownames(assay(vsd_validation3)))
-
-# ggplot(validation2_z_con_stabilised,aes(x=colData(vsd_validation2)$severity,y=S100A12))+geom_boxplot()+geom_jitter(width=0.05)
-
-
-
-# Ostrowski RF for validation2 Model####
-Ostrowski_genefeatures <- c("rn",rownames(assay(vsd_validation3)))
-sum(colnames(filtered_merged_RF) %in% Ostrowski_genefeatures)
-
-# Remove UC cases from the dataset
-phenodata <- fread(paste0("../00_RawData/",cohorttable[Cohort=="Ostrowski_PSC",Metatable]))
-only_PSC_Control <- phenodata[Diagnose %in% c("PSC","Control"), SampleID]
-validation3_z_con_stabilised <- validation3_z_con_stabilised[which(validation3_z_con_stabilised$rn %in% only_PSC_Control), ]
-Diagnose <- phenodata[SampleID %in% only_PSC_Control, Diagnose]
-Ostrowski_PSC_dataset <- data.table(validation3_z_con_stabilised, Diagnose=Diagnose)
-
-reduced3_merged_RF <- filtered_merged_RF[,intersect(colnames(Ostrowski_PSC_dataset), colnames(filtered_merged_RF)),with=F]
-reduced3_Ostrowski_PSC_RF <- Ostrowski_PSC_dataset[,intersect(colnames(Ostrowski_PSC_dataset), colnames(filtered_merged_RF)),with=F]
-
-# Transform diagnose column to integer 1,0
-reduced3_Ostrowski_PSC_RF[["Diagnose"]] <- as.factor(reduced3_Ostrowski_PSC_RF[["Diagnose"]])
-levels(reduced3_Ostrowski_PSC_RF[["Diagnose"]]) <- c(0L,1L) 
-# reduced3_Ostrowski_PSC_RF$Diagnose <- as.factor(reduced3_Ostrowski_PSC_RF$Diagnose) %>% as.integer()
-
-Ostrowski_CON_PSC_Diagnose_results <- performML(dataset = reduced3_Ostrowski_PSC_RF[,-c("rn")],testing_dataset = reduced3_Ostrowski_PSC_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
-
-reducedforOstrowski_CON_PSC_Diagnose_results <- predictwithatunedmodel(tuned_model = Ostrowski_CON_PSC_Diagnose_results$tuned_model, testing_dataset = Ostrowski_CON_PSC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
-#Auroc for external validation dataset
-pROC::auc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
-# pROC::ci.auc(Planell_CON_UC_Diagnose_results$pROC_object)
-#validation with own test dataset
-pROC::auc(reducedforOstrowski_CON_PSC_Diagnose_results$pROC_object)
 
 
 
@@ -1006,4 +905,77 @@ fwrite(data.table(V1=tmp_genelist),col.names = F,file = "output/genes_tmp.txt")
 
 # cibersortx distributions are skewed! To find the most significant genes of every distribution, the median of the distribution of t-values per cell 
 # type should be considered. A difference of more than 4.9 to this value will be considered significant.
+
+# LightGMB (NOT USED)####
+# set.seed(seednr)
+# reduced_splitted <- rsample::initial_split(reduced_merged_RF[,-"rn"], 0.5)
+# reduced_rftrain <- training(reduced_splitted)
+# reduced_rftest <- testing(reduced_splitted)
+# # levels(rftrain$Diagnose) <- c("0","1","1")
+# # levels(rftest$Diagnose) <- c("0","1","1")
+# levels(reduced_Mo_RF$Diagnose) <- c("0","1")
+# #rftest$DiagnoseCohort <- factor(rftest$DiagnoseCohort)
+# reduced_Resultitem <- "Diagnose"
+# #case.weights calculation
+# reduced_training_sample_weights <- case_when(reduced_rftrain$Diagnose == "0" ~ 1/sum(reduced_rftrain$Diagnose=="0"),
+#                                              reduced_rftrain$Diagnose == "1" ~ 1/sum(reduced_rftrain$Diagnose=="1"),
+#                                              reduced_rftrain$Diagnose == "2" ~ 1/sum(reduced_rftrain$Diagnose=="2"),
+#                                              reduced_rftrain$Diagnose == "3" ~ 1/sum(reduced_rftrain$Diagnose=="3"))
+# 
+# reduced_dtrain <- lgb.Dataset(as.matrix(reduced_rftrain[,-"Diagnose"]), label = as.integer(as.factor(reduced_rftrain$Diagnose))-1)
+# reduced_model <- lgb.train(
+#   params = list(
+#     objective = "binary", 
+#     metric = "auc",
+#     boosting = "goss",
+#     #feature_fraction = 0.5,
+#     feature_fraction_bynode = 0.5
+#   )
+#   , data = reduced_dtrain
+# )
+# 
+# reduced_dtest <- lgb.Dataset(as.matrix(reduced_rftest[,-"Diagnose"]), label = as.integer(as.factor(rftest$Diagnose))-1)
+# 
+# reduced_predictions <- predict(reduced_model,as.matrix(reduced_rftest[,-"Diagnose"]))
+# 
+# table(reduced_rftest$Diagnose,round(reduced_predictions)-1)
+# plotROC(reduced_rftest[[reduced_Resultitem]], reduced_predictions, returnSensitivityMat=T)
+# lgb.importance(reduced_model, percentage = TRUE)
+# # cumsum(lgb.importance(reduced_model, percentage = TRUE)$Gain)
+# # cumsum(lgb.importance(reduced_model, percentage = TRUE)$Frequency)
+# #repeat for Mo
+# reduced_Mo_predictions <- predict(reduced_model,as.matrix(reduced_Mo_RF[,-c("rn","Diagnose")]))
+# reduced_Mo_predictions <- round(reduced_Mo_predictions)
+# #reduced_predictedmodel <- predict(reduced_rfmodel, reduced_Mo_RF, type="response")
+# #reduced_Mo_predicted <- as.data.table(reduced_predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
+# reduced_optCutOff <- optimalCutoff(reduced_Mo_RF[[reduced_Resultitem]], reduced_Mo_predictions, optimiseFor = "Both")[1]
+# ROCplotResult <- plotROC(reduced_Mo_RF[[reduced_Resultitem]], reduced_Mo_predictions, returnSensitivityMat=T)
+# table(reduced_Mo_RF$Diagnose,round(reduced_Mo_predictions))
+# 
+# 
+# #Compare top5 features in boxplots: cohort and validation cohort
+# plot_list <- list()
+# for(gene in top25$feature){
+#   require(ggpubr)
+#   try(
+#     p1 <- ggplot(
+#       data=rbindlist(
+#               list(data.table("expression"=unlist(merged_RF[Cohort == 1,..gene]),
+#                               Diagnose=merged_metadata[merged_metadata$Diagnose %in% c("Control","UC") & merged_metadata$Cohort == 1]$Diagnose,
+#                               Cohort="Our"),
+#                     data.table("expression"=unlist(validation_z_con_stabilised[,..gene]),
+#                                Diagnose=vsd_validation$Diagnose,
+#                                Cohort="Validation")
+#                    )
+#               ),
+#       aes(x=Diagnose,y=expression)
+#       )+geom_boxplot()+facet_wrap(~Cohort)+ ylab(gene)+ stat_compare_means( aes(label = ..p.signif..), 
+#                                                                 label.x = 1.5)
+#   )
+#   
+#   plot_list[[gene]]<- p1
+#   
+#   #ggsave(file=p1,filename = paste0("comparison_",gene,".jpg"))
+# }
+# plot_list
 
