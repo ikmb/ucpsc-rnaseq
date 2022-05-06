@@ -615,16 +615,65 @@ pROC::ci.auc(PSCUC_CON_Diagnose_results$pROC_object)
 cem_merged_RF
 
 #Blueprints
-draw(htmp, heatmap_legend_side="top")
 
+png("output/celltype_modules_heatmap.png",width=7.5,height=7.5,units="in",res=1200)
+draw(htmp, heatmap_legend_side="top")
+dev.off()
 #TopGO
 topGo_object
 
 
+# NES Heatmap ####
+cem_merged_RF@enrichment$nes
+nes_matrix <- as.matrix(cem_merged_RF@enrichment$nes[,-1])
+rownames(nes_matrix) <- cem_merged_RF@enrichment$nes$pathway 
+
+
+nes_heatmap <- Heatmap(nes_matrix, 
+                       name="NES",
+                       heatmap_legend_param = list(
+                         legend_direction = "horizontal", 
+                         legend_width = unit(6, "cm")),
+                       height = unit(10, "cm"),
+                       row_km = 1,
+                       row_km_repeats = 10,
+                       row_names_side = "left",
+                       width = unit(14, "cm"),
+                       column_names_rot = 0, 
+                       # column_names_max_height = unit(2, "cm"),
+                       column_names_side = "bottom",
+                       column_names_gp = gpar(fontsize = 10)
+)
+
+
+png("output/NES_heatmap.png",width=7.5,height=7.5,units="in",res=1200)
+draw(nes_heatmap, heatmap_legend_side="top")
+dev.off()
 
 
 
-# Ostrowski PSC analysis, Ostrowski PSC paper and PSC vs. Control comparison ####
+
+
+
+
+
+# TOPGO RF enrichment sets ####
+
+CON_UC_Diagnose_results_topgo_50_restuls <- topGO_enrichment(genelist = mostimportantfeatures(variable_importance_table = CON_UC_Diagnose_results$variable_importance, limit = 50)$feature,
+                 statistical_test = "ks.ties", 
+                 weights = mostimportantfeatures(variable_importance_table = CON_UC_Diagnose_results$variable_importance, limit = 50)$importance, 
+                 #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
+                 DESeq_result = res_UC, 
+                 match_by_expression = TRUE)
+
+PSC_CONTROL_Diagnose_results_topgo_50_restuls <- topGO_enrichment(genelist = mostimportantfeatures(variable_importance_table = PSC_CONTROL_Diagnose_results$variable_importance, limit = 50)$feature,
+                                                             statistical_test = "ks.ties", 
+                                                             weights = mostimportantfeatures(variable_importance_table = PSC_CONTROL_Diagnose_results$variable_importance, limit = 50)$importance, 
+                                                             #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
+                                                             DESeq_result = res_UC, 
+                                                             match_by_expression = TRUE)
+
+# REMOVED: Ostrowski PSC analysis, Ostrowski PSC paper and PSC vs. Control comparison ####
 
 #remove dublicates in the genes/probes
 dds_Ostrowski_PSC$row <-sub('\\..*', '', dds_Ostrowski_PSC$row)

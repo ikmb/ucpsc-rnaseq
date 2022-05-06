@@ -903,3 +903,75 @@ EnhancedVolcano_function <- function(res=NULL,plottitle=element_blank(),plotnumb
     theme(plot.title = element_text(hjust = 0.0))
   return(EV)
 }
+
+plot_pROC_rocs <- function(proclist=list(), procnames=NULL, size.rel=1, plot_tag="a)", plot_title=element_blank()){
+  require(RColorBrewer)
+  require(ggplot2)
+  require(pROC)
+  # Define the number of colors we need
+  nb.cols <- length(proclist)
+  mycolors <- colorRampPalette(brewer.pal(8, "Set3"))(nb.cols)
+  
+  # Plot rocs via ggroc
+  rocs_plotted <- ggroc(proclist, size=1.5)+
+    labs(title=plot_title, tag=plot_tag)+
+    scale_colour_manual(values = mycolors, label= procnames) +
+    theme(#legend.position = c(0.70, 0.19),
+      # legend.position = c(1., 0.),
+      # legend.justification = c(0, 1),
+      legend.position = c(0.98,0.02), # bottom right position with 0.02 margin
+      legend.justification = c(1, 0), # bottom right justification
+      legend.box.margin = margin(1,1,1,1, unit = "mm"), # small margin
+      legend.box.background = element_rect(colour = "black"),
+      panel.background = element_rect(fill = "white", 
+                                      colour = NA), panel.border = element_rect(fill = NA, 
+                                                                                colour = "grey20"), panel.grid = element_line(colour = "grey92"), 
+      panel.grid.minor = element_line(size = rel(0.5)), 
+      #panel.grid.minor = element_blank(),
+      #panel.grid.major = element_blank(),
+      #legend.title = element_text(size = rel(1.8 * size.rel)),
+      #legend.spacing = unit(0.1, "cm"),
+      #legend.box.margin = margin(0,0,0,0, "pt"),
+      legend.title = element_blank(),
+      legend.text = element_text(size = rel(0.8 * size.rel)), 
+      axis.title = element_text(size = rel(1.5 * size.rel)), 
+      axis.text = element_text(size = rel(1.2 * size.rel)), 
+      strip.text.x = element_text(size = rel(1.8 * size.rel)), 
+      strip.text.y = element_text(size = rel(1.8 * size.rel)), 
+      legend.key.height = unit(1.3 * size.rel,"line"), 
+      legend.key.width = unit(1.3 * size.rel, "line"),
+      plot.tag.position = c(-.01, 1.05),
+      plot.tag = element_text(size = rel(3 * size.rel)),
+      plot.margin = margin(40,20,5.5,27, "pt"),
+      strip.background = element_rect(fill = "grey85", 
+                                      colour = "grey20"), legend.key = element_rect(fill = "white", 
+                                                                                    colour = NA), complete = TRUE) +
+    labs(x = "False positive rate (1-specificity)",
+         y = "Detection rate (sensitivity)") +
+    scale_x_reverse(#limits = c(0, 100),
+      expand = expansion(mult = c(.004, .004)),
+      labels = rev(c( "0%", "25%", "50%", "75%", "100%"))) +
+    scale_y_continuous(#limits = c(0, 100),
+      expand = expansion(mult = c(0.004, .004)),
+      labels = (c( "0%", "25%", "50%", "75%", "100%")))+
+    guides(#colour=guide_legend(ncol=2), 
+      linetype = "none")+
+    geom_segment(aes(x = 1, y = 0, xend = 0, yend = 1, linetype="NULL_line"),color="grey85")+
+    scale_linetype_manual(name = "NULL_line_name", values = c("NULL_line" = 1))+
+    coord_fixed()
+  return(rocs_plotted)
+}
+
+mostimportantfeatures <- function(variable_importance_table = NULL, limit= 50){
+  i=as.double(0)
+  j=1L
+  feature_df <- data.table(feature=c(),importance=c())
+  normed_importance <- (100/sum(variable_importance_table$importance))*variable_importance_table$importance
+  while (i < limit){
+    feature_df <- rbind(feature_df, variable_importance_table[j,])
+    i = i + as.double(normed_importance[j])
+    j = j + 1
+        #print(i)
+  }
+  return(feature_df)
+}

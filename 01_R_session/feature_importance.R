@@ -6,7 +6,6 @@ feature_importance_df <- feature_importance_df[order(feature_importance_df$impor
 feature_importance_df$feature <- ordered(feature_importance_df$feature, levels=feature_importance_df[order(feature_importance_df$importance, decreasing = T),]$feature)
 ggplot(data=feature_importance_df, aes(x=feature,y=importance))+geom_point()
 
-feature_importance_df[1:300,]$feature
 
 
 
