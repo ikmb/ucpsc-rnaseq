@@ -1,22 +1,15 @@
 require(data.table)
 require(tidyverse)
 require(DESeq2)
-# require(rvcheck)
 require(CEMiTool)
-# require(M3C)
 require(rmarkdown)
-# require(RColorBrewer)
-# require(gridExtra)
-# require(ggpubr)
-# require(ggplotify)
-# require(VennDiagram)
-# require(extrafont)
 
-# FUNCTIONS ####
+
+# FUNCTIONS #
 getnormalizedDESeq2object <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
   require(data.table)
   cohorttable <- fread(corhorttablelocation, header=T)
- 
+  
   counttable <-unlist(cohorttable[Cohort %in% cohortname,2])
   metatable <- unlist(cohorttable[Cohort %in% cohortname,3])
   metatableheader <- as.logical(unlist(cohorttable[Cohort %in% cohortname,4]))
@@ -101,14 +94,14 @@ getrawcounts <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/coh
   countmatrix <- countmatrix[,metadata$SampleID]
   #filtering to 10 counts per gene in at least 10% of samples
   countmatrix <- countmatrix[as.vector(rowSums(countmatrix>10)>(dim(countmatrix)[2]/10)),]
-
+  
   return(countmatrix)
 }
 
 getmetadata <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname="Our"){
   require(data.table)
   cohorttable <- fread(corhorttablelocation, header=T)
-
+  
   counttable <-unlist(cohorttable[Cohort %in% cohortname,2])
   metatable <- unlist(cohorttable[Cohort %in% cohortname,3])
   metatableheader <- as.logical(unlist(cohorttable[Cohort %in% cohortname,4]))
@@ -155,7 +148,7 @@ vsdofallknownseverity <- function(meta=metadata, countmatrix=rawcounts, batch="P
   dds <- DESeq(dds)
   vsd <- vst(dds, blind=FALSE)
   return(vsd)
-  }
+}
 
 ddsofallknownseverity <- function(meta=metadata, countmatrix=rawcounts, batch="PlateNr",...){
   #throwing out all Unknown severity patients:
@@ -170,7 +163,7 @@ ddsofallknownseverity <- function(meta=metadata, countmatrix=rawcounts, batch="P
   dds <- DESeqDataSetFromMatrix(countData=countmatrix, colData=meta, design= ~batch + severity)
   dds <- DESeq(dds)
   return(dds)
-  }
+}
 
 getCohortsVSD <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/cohorts.csv"),cohortname=NULL){
   require(data.table)
@@ -184,7 +177,7 @@ getCohortsVSD <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/co
   metatableheader <- as.logical(unlist(cohorttable[Cohort %in% cohortname,4]))
   Disease <- as.vector(unlist(cohorttable[Cohort %in% cohortname, 5]))
   UC <- fread(file= paste0(projectdir,"/00_RawData/",counttable))
- 
+  
   colnames(UC) <- gsub("_1Aligned.sortedByCoord.out.bam","",colnames(UC))
   colnames(UC) <- gsub("Aligned.sortedByCoord.out.bam","",colnames(UC))
   
@@ -246,7 +239,7 @@ getCohortsVSD <- function(corhorttablelocation=paste0(projectdir,"/00_RawData/co
       DESeqperformed<- FALSE
     }
   }
-
+  
   return(vsd)
 }
 
@@ -335,15 +328,15 @@ remove_outlier_filter <- function(x=NULL){
 outlierfiltered_control_transformation <- function(dataset=NULL,controlsvector=NULL){
   cols <-  colnames(dataset)
   transformed_dataset <- apply(dataset,1,function(x){
-                              y <- x[controlsvector];
-                              z <- y[remove_outlier_filter(y)];
-                              (x-mean(y))/sd(z)}
-                              )
+    y <- x[controlsvector];
+    z <- y[remove_outlier_filter(y)];
+    (x-mean(y))/sd(z)}
+  )
   transformed_dataset <- t(transformed_dataset)
   transformed_dataset <- data.table(transformed_dataset, keep.rownames=TRUE)
   colnames(transformed_dataset) <- cols
   return(transformed_dataset)
-  }
+}
 
 #see https://stackoverflow.com/questions/28653867/best-way-to-transpose-data-table
 transpose_datatable<- function(datatable){
@@ -456,7 +449,7 @@ CEMiwrapper <- function(expressionmatrix=assay(vsd), ID=metadata$SampleID, Group
     #int_df <- fread(interaction_location)
     #class(int_df) <- "data.frame"    
     #All together:
-    cem <- CEMiTool::cemitool(CountsforCemi, sample_annot, gmt_in, 
+    cem <- CEMiTool::cemitool(CountsforCemi, sample_annot, gmt_in, network_type = "signed", tom_type = "signed",
                               filter=applyfiltering, plot=TRUE, verbose=TRUE,gsea_max_size = 10000)}
   else{
     foreach::registerDoSEQ()
@@ -468,7 +461,7 @@ CEMiwrapper <- function(expressionmatrix=assay(vsd), ID=metadata$SampleID, Group
     gmt_in <- gmt_in[!gmt_in$gene=="",]
     
     #All together:
-    cem <- CEMiTool::cemitool(CountsforCemi, sample_annot, gmt_in, 
+    cem <- CEMiTool::cemitool(CountsforCemi, sample_annot, gmt_in, network_type = "signed", tom_type = "signed",
                               filter=TRUE, plot=TRUE, verbose=TRUE,set_beta = 20,gsea_max_size = 10000)
   }
   generate_report(cem, force=T, title = cohortname, nameofcohort=reportname,...)
@@ -498,7 +491,7 @@ blueprintplot <- function(genes=NULL){
   
   blueprint <- as.ggplot(pheatmap(t(z_bprint_expression_mat_reduced),cluster_rows = F,cluster_cols = F,fontsize=7,border_color=NA,legend=F,show_rownames=F,main="genes",breaks=seq(from=-3,to=3,length.out = 101),silent=F))#,filename="marker_expression_BLUEPRINT_celltypes.png", width = 7, height =7)
   return(blueprint)
-  }
+}
 
 # #return a data table with z-scores for enrichment of specific cell type of given input-genes
 # blueprintenrichments <- function(genes=NULL){
@@ -649,7 +642,7 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   require(rsample)
   require(pROC)
   require(InformationValue)
-    
+  
   dataset[[outcome_column]] <- base::droplevels(dataset[[outcome_column]])
   levels(dataset[[outcome_column]]) <- c(0,1)
   set.seed(seednr)
@@ -660,7 +653,7 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   Resultitem <- outcome_column
   
   
-
+  
   tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
   
   
@@ -726,7 +719,7 @@ topGO_enrichment <- function(genelist = NULL,
                              weights = NULL,
                              weight_threshold = 0,
                              statistical_test="Fisher", 
-                             algorithm_topGO = "classic",
+                             algorithm_topGO = "elim",#"classic",
                              DESeq_result = NULL,
                              match_by_expression = FALSE,
                              gene_background = NULL,
@@ -853,6 +846,9 @@ topGO_enrichment <- function(genelist = NULL,
                      test.pvalue = resultTopGO,
                      orderBy = "Fisher.elim" , topNodes = 200)
   }
+  #Multiple Testing Correction:
+  tab$padj <- p.adjust(as.double(tab$test.pvalue), method="BH", resultTopGO@geneData[4])
+  
   
   
   #printGraph(tgd, resultTopGO.elim, firstSigNodes = 5, fn.prefix = output_dir, useInfo = "all", pdfSW = TRUE)
@@ -863,8 +859,7 @@ topGO_enrichment <- function(genelist = NULL,
   return(tab)
 }
 
-
-EnhancedVolcano_function <- function(res=NULL,plottitle=element_blank(),plotnumber=element_blank()){
+EnhancedVolcano_function <- function(res=NULL,plottitle=element_blank(),plotnumber=element_blank(),labsize=3.0, ...){
   require(EnhancedVolcano)
   lab_italics <- paste0("italic('", rownames(res), "')")
   #selectLab_italics = paste0(
@@ -877,17 +872,21 @@ EnhancedVolcano_function <- function(res=NULL,plottitle=element_blank(),plotnumb
                                          caption="",
                                          lab = lab_italics,
                                          x = 'log2FoldChange',
-                                         y = 'pvalue',
+                                         y = 'padj',
+                                         xlim = c(min(res[['log2FoldChange']], na.rm = TRUE) - 0.1, max(res[['log2FoldChange']], na.rm = TRUE) +
+                                                    0.1),
+                                         ylab = bquote(~- ~ Log[10] ~ italic(P- Adjusted)),
                                          #                  selectLab = selectLab_italics,
                                          xlab = bquote(~Log[2]~ 'fold change'),
                                          max.overlaps = 30,
-                                         #                  pCutoff = 10e-14,
+                                         pCutoff = 1e-02,
                                          #                  FCcutoff = 1.0,
                                          pointSize = 3.0,
-                                         labSize = 3.0,
+                                         labSize = labsize,
                                          labCol = 'black',
                                          labFace = 'bold',
-                                         #legendLabels = c("NS", expression(Log[2] ~ FC), "p-value", paste0( expression(~ p - value ~ and),"\n",expression(~ log[2] ~ FC))),
+                                         legendLabels = c("NS", expression(Log[2] ~ FC), "p - Adjusted", expression(p - ~ Adjusted ~ and
+                                                                                                                    ~ log[2] ~ FC)), #c("NS", expression(Log[2] ~ FC), "p-value", paste0("P-Adjusted and ",expression(Log[2] ~ FC))),#expression(p - value ~ and ~ log[2] ~ FC)),
                                          boxedLabels = FALSE,
                                          parseLabels = TRUE,
                                          col = c('black', 'pink', 'purple', 'red3'),
@@ -904,14 +903,18 @@ EnhancedVolcano_function <- function(res=NULL,plottitle=element_blank(),plotnumb
   return(EV)
 }
 
-plot_pROC_rocs <- function(proclist=list(), procnames=NULL, size.rel=1, plot_tag="a)", plot_title=element_blank()){
+plot_pROC_rocs <- function(proclist=list(), procnames=NULL, size.rel=1, plot_tag="a)", plot_title=element_blank(),setcolors=""){
   require(RColorBrewer)
   require(ggplot2)
   require(pROC)
   # Define the number of colors we need
-  nb.cols <- length(proclist)
-  mycolors <- colorRampPalette(brewer.pal(8, "Set3"))(nb.cols)
   
+  if(setcolors[1]==""){
+    nb.cols <- length(proclist)
+    mycolors <- colorRampPalette(brewer.pal(8, "Set3"))(nb.cols)
+  }else{
+    mycolors=setcolors
+  }
   # Plot rocs via ggroc
   rocs_plotted <- ggroc(proclist, size=1.5)+
     labs(title=plot_title, tag=plot_tag)+
@@ -921,7 +924,7 @@ plot_pROC_rocs <- function(proclist=list(), procnames=NULL, size.rel=1, plot_tag
       # legend.justification = c(0, 1),
       legend.position = c(0.98,0.02), # bottom right position with 0.02 margin
       legend.justification = c(1, 0), # bottom right justification
-      legend.box.margin = margin(1,1,1,1, unit = "mm"), # small margin
+      legend.box.margin = margin(1,4,1,1, unit = "mm"), # small margin
       legend.box.background = element_rect(colour = "black"),
       panel.background = element_rect(fill = "white", 
                                       colour = NA), panel.border = element_rect(fill = NA, 
@@ -933,7 +936,7 @@ plot_pROC_rocs <- function(proclist=list(), procnames=NULL, size.rel=1, plot_tag
       #legend.spacing = unit(0.1, "cm"),
       #legend.box.margin = margin(0,0,0,0, "pt"),
       legend.title = element_blank(),
-      legend.text = element_text(size = rel(0.8 * size.rel)), 
+      legend.text = element_text(size = rel(1 * size.rel)), #0.8
       axis.title = element_text(size = rel(1.5 * size.rel)), 
       axis.text = element_text(size = rel(1.2 * size.rel)), 
       strip.text.x = element_text(size = rel(1.8 * size.rel)), 
@@ -962,7 +965,67 @@ plot_pROC_rocs <- function(proclist=list(), procnames=NULL, size.rel=1, plot_tag
   return(rocs_plotted)
 }
 
+# plot_pROC_rocs <- function(proclist=list(), procnames=NULL, size.rel=1, plot_tag="a)", plot_title=element_blank()){
+#   require(RColorBrewer)
+#   require(ggplot2)
+#   require(pROC)
+#   # Define the number of colors we need
+#   nb.cols <- length(proclist)
+#   mycolors <- colorRampPalette(brewer.pal(8, "Set3"))(nb.cols)
+#   
+#   # Plot rocs via ggroc
+#   rocs_plotted <- ggroc(proclist, size=1.5)+
+#     labs(title=plot_title, tag=plot_tag)+
+#     scale_colour_manual(values = mycolors, label= procnames) +
+#     theme(#legend.position = c(0.70, 0.19),
+#       # legend.position = c(1., 0.),
+#       # legend.justification = c(0, 1),
+#       legend.position = c(0.98,0.02), # bottom right position with 0.02 margin
+#       legend.justification = c(1, 0), # bottom right justification
+#       legend.box.margin = margin(1,1,1,1, unit = "mm"), # small margin
+#       legend.box.background = element_rect(colour = "black"),
+#       panel.background = element_rect(fill = "white", 
+#                                       colour = NA), panel.border = element_rect(fill = NA, 
+#                                                                                 colour = "grey20"), panel.grid = element_line(colour = "grey92"), 
+#       panel.grid.minor = element_line(size = rel(0.5)), 
+#       #panel.grid.minor = element_blank(),
+#       #panel.grid.major = element_blank(),
+#       #legend.title = element_text(size = rel(1.8 * size.rel)),
+#       #legend.spacing = unit(0.1, "cm"),
+#       #legend.box.margin = margin(0,0,0,0, "pt"),
+#       legend.title = element_blank(),
+#       legend.text = element_text(size = rel(1 * size.rel)), #0.8
+#       axis.title = element_text(size = rel(1.5 * size.rel)), 
+#       axis.text = element_text(size = rel(1.2 * size.rel)), 
+#       strip.text.x = element_text(size = rel(1.8 * size.rel)), 
+#       strip.text.y = element_text(size = rel(1.8 * size.rel)), 
+#       legend.key.height = unit(1.3 * size.rel,"line"), 
+#       legend.key.width = unit(1.3 * size.rel, "line"),
+#       plot.tag.position = c(-.01, 1.05),
+#       plot.tag = element_text(size = rel(3 * size.rel)),
+#       plot.margin = margin(40,20,5.5,27, "pt"),
+#       strip.background = element_rect(fill = "grey85", 
+#                                       colour = "grey20"), legend.key = element_rect(fill = "white", 
+#                                                                                     colour = NA), complete = TRUE) +
+#     labs(x = "False positive rate (1-specificity)",
+#          y = "Detection rate (sensitivity)") +
+#     scale_x_reverse(#limits = c(0, 100),
+#       expand = expansion(mult = c(.004, .004)),
+#       labels = rev(c( "0%", "25%", "50%", "75%", "100%"))) +
+#     scale_y_continuous(#limits = c(0, 100),
+#       expand = expansion(mult = c(0.004, .004)),
+#       labels = (c( "0%", "25%", "50%", "75%", "100%")))+
+#     guides(#colour=guide_legend(ncol=2), 
+#       linetype = "none")+
+#     geom_segment(aes(x = 1, y = 0, xend = 0, yend = 1, linetype="NULL_line"),color="grey85")+
+#     scale_linetype_manual(name = "NULL_line_name", values = c("NULL_line" = 1))+
+#     coord_fixed()
+#   return(rocs_plotted)
+# }
+# 
+# 
 mostimportantfeatures <- function(variable_importance_table = NULL, limit= 50){
+  #Return the best features that comprise the limit percent of total importance.
   i=as.double(0)
   j=1L
   feature_df <- data.table(feature=c(),importance=c())
@@ -974,4 +1037,34 @@ mostimportantfeatures <- function(variable_importance_table = NULL, limit= 50){
         #print(i)
   }
   return(feature_df)
+}
+
+keep_high_variance_genes <- function(matrix_input = NULL, remove_var= 0.1){
+  #Check the variance within each column and remove the lowest (remove_var * 100) percent of it. 
+  #Return the column names to keep.
+  vars <- colVars(matrix_input)
+  varorder <- order(vars, decreasing = TRUE)
+  keep <- head(varorder, max(1, ncol(matrix_input) * (1 - remove_var)))
+  # matrix_input <- matrix_input[, keep, drop = FALSE]
+  genes_with_highvariance <- colnames(matrix_input[, keep, drop = FALSE])
+  # vars <- vars[keep]
+  return(genes_with_highvariance)
+}
+
+gotermpreview <- function(df=NULL){
+  if(dim(df[df$padj < 0.01 ,])[1]<4){
+    return(df[1:5,])
+  }else{
+    return(df[df$padj < 0.01,])
+  }
+}
+
+#reverse log10 scale from https://stackoverflow.com/a/20924974
+reverselog_trans <- function(base = exp(1)) {
+  trans <- function(x) -log(x, base)
+  inv <- function(x) base^(-x)
+  trans_new(paste0("reverselog-", format(base)), trans, inv, 
+            log_breaks(base = base), 
+            domain = c(1e-100, Inf)
+  )
 }

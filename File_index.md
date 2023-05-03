@@ -11,7 +11,3 @@
 
 #data_rescourcces:
         data_rescources/GO_biological_Process_2018.gmt
-
-#01_R_session:
-        01_R_session/rf25_with_seed.txt
-        01_R_session/rf500_with_seed.txt
