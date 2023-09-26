@@ -1,6 +1,3 @@
-#setwd(paste0("/ssdpool/ewacker/RNAseq","/01_R_session"))
-# setwd(paste0("/home/sukmb465/Documents/Eike/Projects/uc-rnaseq/01_R_session"))
-
 library(data.table)
 library(plyr)
 library(tidyverse)
@@ -16,7 +13,6 @@ library(ggpubr)
 library(CEMiTool)
 library(rmarkdown)
 library(EnhancedVolcano)
-
 
 source("functions.r")
 
@@ -36,10 +32,12 @@ gmt_file <- paste0(projectdir,"/data_rescources/GO_Biological_Process_2018.gmt")
 output_location <- paste0("output")
 
 PSC_rawcounts <- getrawcounts(corhorttablelocation=corhorttablelocation,cohortname="PSC")
-# vsd <- getnormalizedDESeq2object(corhorttablelocation=corhorttablelocation,cohortname=cohortname)
+
 PSC_metadata <- getmetadata(corhorttablelocation=corhorttablelocation,cohortname="PSC")
 PSC_metadata <- PSC_metadata[PSC_metadata$Diagnose %in% c("PSC","Control"),]
 
+PSC_metadata$yearssincediagnose <- PSC_metadata$`Age at samplingdate` - PSC_metadata$`Years at liverdiagnose`
+as.Date(PSC_metadata$`Date liverdiagnose`,tryFormats = c("%m/%d/%Y")) - as.Date(PSC_metadata$`Samplingdate`,tryFormats = c("%m/%d/%Y"))# - PSC_metadata$`Years at liverdiagnose`
 
 PSC_metadata$Maindiagnose <- case_when(PSC_metadata$`IBD diagnose` == "Ulcerøs colitt" ~ "PSCUC",
                                        PSC_metadata$`IBD diagnose` == "Ingen" & PSC_metadata$Diagnose=="PSC" ~ "PSC",
@@ -49,19 +47,23 @@ PSC_metadata$Maindiagnose <- case_when(PSC_metadata$`IBD diagnose` == "Ulcerøs 
 PSC_metadata <- PSC_metadata[!PSC_metadata$Maindiagnose == "REMOVE",]
 PSC_metadata$Diagnose <- PSC_metadata$Maindiagnose
 
+
+PSC_metadata$yearssincediagnose <- PSC_metadata$`Age at samplingdate` - PSC_metadata$`Years at liverdiagnose`
+
+PSC_metadata$yearssincediagnose[PSC_metadata$yearssincediagnose < 0] <- NA_real_
+
+
+
 PSC_rawcounts <- getrawcounts(corhorttablelocation=corhorttablelocation,cohortname="PSC")
 PSC_rawcounts <- PSC_rawcounts[,colnames(PSC_rawcounts) %in% PSC_metadata$SampleID]
 UC_rawcounts <- getrawcounts(corhorttablelocation=corhorttablelocation,cohortname="Our")
 UC_metadata <- getmetadata(corhorttablelocation=corhorttablelocation,cohortname="Our")
-
+UC_metadata$yearssincediagnose <- NA_real_
 
 SampleIDs <- c(colnames(PSC_rawcounts),colnames(UC_rawcounts))
 merged_rawcounts <- rbindlist(list(data.frame(t(PSC_rawcounts)),data.frame(t(UC_rawcounts))),fill=TRUE)
 intersectedgenes <- intersect(colnames(data.frame(t(PSC_rawcounts))), colnames(data.frame(t(UC_rawcounts))))
 merged_rawcounts <- merged_rawcounts[,..intersectedgenes]
-
-#Optional Hard filtering to exclude zero expression in any sample genes:
-# merged_rawcounts <- merged_rawcounts[,!(apply(merged_rawcounts <= 1, 2, any)),with=FALSE]
 
 #Filtering for allowing only 10% of samples with zero values per gene
 merged_rawcounts <- merged_rawcounts[,as.vector(colSums(merged_rawcounts == 0)<(dim(merged_rawcounts)[1]/10)),with=FALSE]
@@ -69,10 +71,18 @@ merged_rawcounts <- merged_rawcounts[,as.vector(colSums(merged_rawcounts == 0)<(
 merged_rawcounts <- t(merged_rawcounts)
 colnames(merged_rawcounts) <- SampleIDs
 
-merged_metadata <- rbind(PSC_metadata[,c("SampleID","Diagnose","PlateNr")],UC_metadata[,c("SampleID","Diagnose","PlateNr")])
+merged_metadata <- rbind(PSC_metadata[,c("SampleID","Diagnose","PlateNr", "yearssincediagnose")],UC_metadata[,c("SampleID","Diagnose","PlateNr", "yearssincediagnose")])
 merged_metadata$Cohort <- factor(c(rep(0,length(PSC_metadata$SampleID)),rep(1,length(UC_metadata$SampleID))))
 
-dds <- DESeqDataSetFromMatrix(countData=merged_rawcounts, colData=merged_metadata, design= ~Diagnose + PlateNr)
+merged_metadata$yearssincebinned <- case_when(merged_metadata$yearssincediagnose == 0 ~ "newly",
+          merged_metadata$yearssincediagnose > 0 & merged_metadata$yearssincediagnose < 4 ~ "newly",
+          merged_metadata$yearssincediagnose >= 4 & merged_metadata$yearssincediagnose < 10 ~ "medium",
+          merged_metadata$yearssincediagnose >= 10 & merged_metadata$yearssincediagnose < 30 ~ "long",
+          merged_metadata$yearssincediagnose >= 30 & merged_metadata$yearssincediagnose < 40 ~ "long",
+          merged_metadata$yearssincediagnose >= 50 & merged_metadata$yearssincediagnose < 60 ~ "SixthDecade",
+          is.na(merged_metadata$yearssincediagnose) ~ "Missing")
+
+dds <- DESeqDataSetFromMatrix(countData=merged_rawcounts, colData=merged_metadata, design= ~Diagnose + PlateNr + yearssincebinned)
 dds <- DESeq(dds)
 vsd <- vst(dds, blind=FALSE)
 
@@ -171,7 +181,7 @@ reduced_Mo_RF <- Mo_dataset[,intersect(colnames(Mo_dataset), colnames(filtered_m
 Mo_CON_UC_Diagnose_results <- performML(dataset = reduced_merged_RF[,-c("rn")], testing_dataset = reduced_Mo_RF,  splitfactor = 0.5, outcome_column = "Diagnose", seed = seednr)
 
 pROC::auc(Mo_CON_UC_Diagnose_results$pROC_object)
-
+pROC::ci.auc(Mo_CON_UC_Diagnose_results$pROC_object)
 
 # ggplot(validation_z_con_stabilised,aes(x=colData(vsd_validation)$severity,y=ZFP36L2))+geom_boxplot()+geom_jitter(width=0.05)
 
@@ -212,7 +222,7 @@ Planell_CON_UC_Diagnose_results <- performML(dataset = reduced2_merged_RF[,-c("r
 reducedforplanell_CON_UC_Diagnose_results <- predictwithatunedmodel(tuned_model = Planell_CON_UC_Diagnose_results$tuned_model, testing_dataset = Planell_CON_UC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
 #Auroc for external validation dataset
 pROC::auc(Planell_CON_UC_Diagnose_results$pROC_object)
-# pROC::ci.auc(Planell_CON_UC_Diagnose_results$pROC_object)
+pROC::ci.auc(Planell_CON_UC_Diagnose_results$pROC_object)
 #validation with own test dataset
 pROC::auc(reducedforplanell_CON_UC_Diagnose_results$pROC_object)
 
@@ -224,6 +234,9 @@ validation_ostrowskicohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
                                     Mo_UC="Diagnose",
                                     Planell="Endoscopic\nMayo Score")
 vsd_validation_ostrowski <- getCohortsVSD(cohortname=validation_ostrowski_cohortname)
+
+# ostrowski_res <- getCohortsRES(cohortname = "Ostrowski")
+
 severityscale <- validation_ostrowskicohorts[[validation_ostrowski_cohortname]]
 dds_validation_ostrowski <- getCohortsDDS(cohortname=validation_ostrowski_cohortname)
 vsd_validation_ostrowski$severity <- vsd_validation_ostrowski$Diagnose
@@ -288,19 +301,11 @@ PSC_PSCUC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose !
 pROC::auc(PSC_PSCUC_Diagnose_results$pROC_object)
 
 
-# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=UBASH3A))+
-#   geom_jitter()+#geom_boxplot()+
-#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
-
 # PSCUC vs UC, no CON, no PSC ###########
 PSCUC_UC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 1,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
 
 pROC::auc(PSCUC_UC_Diagnose_results$pROC_object)
 
-# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
-#   geom_jitter()+
-#   geom_boxplot()+
-#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 
 # PSCUC+PSC vs UC; no CON###########
 #Diagnose: 0=Control, 1=PSC, 2=PSCUC, 3=UC
@@ -317,10 +322,6 @@ PSCUCPSC_UC_Diagnose_results <- performML(dataset = PSCUCPSC_merged_RF,
 
 pROC::auc(PSCUCPSC_UC_Diagnose_results$pROC_object)
 
-# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
-#   geom_jitter()+
-#   geom_boxplot()+
-#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 
 # PSCUC+PSC vs CON; no UC###########
 #Diagnose: 0=Control, 1=PSC, 2=PSCUC, 3=UC
@@ -337,10 +338,6 @@ PSCUCPSC_CON_Diagnose_results <- performML(dataset = PSCUCPSC_CON_merged_RF,
 
 pROC::auc(PSCUCPSC_CON_Diagnose_results$pROC_object)
 
-# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
-#   geom_jitter()+
-#   geom_boxplot()+
-#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
 # PSCUC vs CON; no UC; no PSC###########
 #Diagnose: 0=Control, 1=PSC, 2=PSCUC, 3=UC
 PSCUC_CON_merged_RF <- merged_RF[!(merged_RF$Diagnose %in% c(3,1)),-c("rn","Cohort")]
@@ -356,10 +353,7 @@ PSCUC_CON_Diagnose_results <- performML(dataset = PSCUC_CON_merged_RF,
 
 pROC::auc(PSCUC_CON_Diagnose_results$pROC_object)
 
-# ggplot(merged_RF[,-c("rn","Cohort")],aes(x=Diagnose,y=CD14))+
-#   geom_jitter()+
-#   geom_boxplot()+
-#   scale_x_discrete(labels = c('Control',"PSC","PSC/UC","UC"))#+facet_wrap(~merged_metadata$Cohort)
+
 # CEMiTool #####
 #create an expressionmatrix dataframe for CEMItool:
 merged_RF_expressionmatrix <- transpose_datatable(merged_RF[,-c("Diagnose", "Cohort")])
@@ -368,6 +362,12 @@ merged_RF_expressionmatrix <- data.frame(merged_RF_expressionmatrix,row.names = 
 #perform CEMItool analysis
 cem_merged_RF <- CEMiwrapper(expressionmatrix=merged_RF_expressionmatrix, ID=merged_metadata$SampleID, Groups=merged_metadata$Diagnose, reportname=paste0("PSC_PSCUC_UC","_Diagnose"), applyfiltering = FALSE)
 # save.image(file="performedanalysis.RData")
+
+# # with KEGG
+# cem_merged_RF_KEGG <- CEMiwrapper(expressionmatrix=merged_RF_expressionmatrix, ID=merged_metadata$SampleID, Groups=merged_metadata$Diagnose, reportname=paste0("PSC_PSCUC_UC","_Diagnose","_KEGG"), applyfiltering = FALSE, gmt_location=paste0(projectdir,"/data_rescources/KEGG_2021_Human.txt"))
+# # With Reactome
+# cem_merged_RF_REACTOME <- CEMiwrapper(expressionmatrix=merged_RF_expressionmatrix, ID=merged_metadata$SampleID, Groups=merged_metadata$Diagnose, reportname=paste0("PSC_PSCUC_UC","_Diagnose","_REACTOME"), applyfiltering = FALSE, gmt_location=paste0(projectdir,"/data_rescources/Reactome_2022.txt"))
+
 
 # Cell Blueprints ####
 #Cell Blueprints LM22 for every module created from cemitools:
@@ -405,8 +405,8 @@ res <- results(dds,  contrast=c("Diagnose","UC","Control"),tidy=T)
 
 topGo_object <- topGO_enrichment(genelist = PSCUC_UC_Diagnose_results$variable_importance[1:1000,]$feature, statistical_test = "ks.ties", weights = PSCUC_UC_Diagnose_results$variable_importance[1:1000,]$importance, #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
                                  DESeq_result = res, match_by_expression = TRUE)
-topGo_object <- topGO_enrichment(genelist = PSCUC_UC_Diagnose_results$variable_importance[1:100,]$feature, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
-                                 DESeq_result = res, match_by_expression = TRUE, ontology_type = "MF")
+# topGo_object <- topGO_enrichment(genelist = PSCUC_UC_Diagnose_results$variable_importance[1:100,]$feature, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
+#                                  DESeq_result = res, match_by_expression = TRUE, ontology_type = "MF")
 
 
 
@@ -442,7 +442,7 @@ fwrite(res_PSCUC_PSC, file="output/deseq_PSCUC_PSC.csv")
 Planell_CON_UC_Diagnose_results
 Mo_CON_UC_Diagnose_results
 Ostrowski_CON_UC_Diagnose_results
-Ostrowski_CON_PSC_Diagnose_results
+# Ostrowski_CON_PSC_Diagnose_results
 
 
 #Our Dataset:
@@ -503,11 +503,6 @@ dev.off()
 
 
 
-
-
-
-
-
 # TOPGO RF enrichment sets ####
 #Supplemmentary Tables 8 to 11:
 CON_UC_features <- mostimportantfeatures(variable_importance_table = CON_UC_Diagnose_results$variable_importance, limit = 50)
@@ -527,38 +522,7 @@ CON_UC_Diagnose_results_topgo_50_results2 <- topGO_enrichment(genelist = CON_UC_
                                                               DESeq_result = res_UC,
                                                               match_by_expression = TRUE)
 fwrite(CON_UC_Diagnose_results_topgo_50_results, file = "output/ST8_CON_UC_Diagnose_results_topgo_50_results.csv")
-# PSC_CONTROL_Diagnose_results_topgo_50_results <- topGO_enrichment(genelist = mostimportantfeatures(variable_importance_table = PSC_CONTROL_Diagnose_results$variable_importance, limit = 50)$feature,
-#                                                              statistical_test = "ks.ties", 
-#                                                              weights = mostimportantfeatures(variable_importance_table = PSC_CONTROL_Diagnose_results$variable_importance, limit = 50)$importance, 
-#                                                              #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
-#                                                              DESeq_result = res_UC, 
-#                                                              ontology_type = "BP",
-#                                                              match_by_expression = TRUE)
-# fwrite(CON_UC_Diagnose_results_topgo_50_results, file = "output/PSC_CONTROL_Diagnose_results_topgo_50_results.csv")
 
-
-# mostimportantfeatures_absolute <- function(variable_importance_table = NULL, limit= 50){
-#   #Return the best features that comprise the limit percent of total importance. 
-#   i=as.double(0)
-#   j=1L
-#   feature_df <- data.table(feature=c(),importance=c())
-#   normed_importance <- variable_importance_table$importance #(100/sum(variable_importance_table$importance))*variable_importance_table$importance
-#   while (i < limit){
-#     feature_df <- rbind(feature_df, variable_importance_table[j,])
-#     i = i + as.double(normed_importance[j])
-#     j = j + 1
-#     #print(i)
-#   }
-#   return(feature_df)
-# }
-
-# PSCUCPSC_CON_Diagnose_results_topgo_50_results <- topGO_enrichment(genelist = mostimportantfeatures(variable_importance_table = PSCUCPSC_CON_Diagnose_results$variable_importance, limit = 50)$feature,
-#                                                                    statistical_test = "ks.ties",
-#                                                                    weights = mostimportantfeatures(variable_importance_table = PSCUCPSC_CON_Diagnose_results$variable_importance, limit = 50)$importance,
-#                                                                    #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature,
-#                                                                    DESeq_result = res_UC,
-#                                                                    ontology_type = "BP",
-#                                                                    match_by_expression = TRUE)
 
 PSCUCPSC_CON_Diagnose_results_topgo_50_results <- topGO_enrichment(genelist = mostimportantfeatures(variable_importance_table = PSCUCPSC_CON_Diagnose_results$variable_importance, limit = 50)$feature,
                                                                    statistical_test = "ks.ties",
@@ -667,29 +631,10 @@ results(dds, contrast = c("Diagnose","PSC","UC"),tidy=T)
 results(dds_PSC_as_one, contrast = c("Diagnose2","PSC","UC"),tidy=T) #should be different
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ##### FIGURE 2 (if you exculde graphical abstract, it's 1)####
 ##Lookup single gene expressions:
 #ggplot(test_vst_counts)+geom_jitter(aes(x=merged_metadata$Diagnose,y=MAN2A))+facet_wrap(~merged_metadata$Cohort)
 size.rel = 1L
-# Volcano Plots ####
-#PSC vs CON
-# res_PSC_untidy <- results(dds,  contrast=c("Diagnose","PSC","Control"))
-#resLFC_PSC <- lfcShrink(dds, coef=resultsNames(dds)[2], type="apeglm")
 
 #UC vs CON
 res_UC_untidy <- results(dds,  contrast=c("Diagnose","UC","Control"),tidy=F)
@@ -713,50 +658,6 @@ res_PSCandPSCUC_CON_untidy <- results(dds2,  contrast=c("Diagnose","PSC+PSCUC","
 
 res_UC_PSCandPSCUC_tidy <- results(dds2,  contrast=c("Diagnose","UC","PSC+PSCUC"),tidy=T)
 res_UC_PSCandPSCUC_untidy <- results(dds2,  contrast=c("Diagnose","UC","PSC+PSCUC"),tidy=F)
-
-# EnhancedVolcano_function <- function(res=NULL,plottitle=element_blank(),plotnumber=element_blank()){
-#   require(EnhancedVolcano)
-#   lab_italics <- paste0("italic('", rownames(res), "')")
-#   #selectLab_italics = paste0(
-#   #  "italic('",
-#   #  c('VCAM1','KCTD12','ADAM12', 'CXCL12','CACNB2','SPARCL1','DUSP1','SAMHD1','MAOA'),
-#   #  "')")
-#   EV <- EnhancedVolcano::EnhancedVolcano(res,
-#                   title=plotnumber,
-#                   subtitle=plottitle,
-#                   caption="",
-#                   lab = lab_italics,
-#                   x = 'log2FoldChange',
-#                   y = 'padj',
-# #                  selectLab = selectLab_italics,
-#                   xlab = bquote(~Log[2]~ 'fold change'),
-#                   max.overlaps = 30,
-# #                  pCutoff = 10e-14,
-# #                  FCcutoff = 1.0,
-#                   pointSize = 3.0,
-#                   labSize = 3.0,
-#                   labCol = 'black',
-#                   labFace = 'bold',
-#                   #legendLabels = c("NS", expression(Log[2] ~ FC), "p-value", paste0( expression(~ p - value ~ and),"\n",expression(~ log[2] ~ FC))),
-#                   boxedLabels = FALSE,
-#                   parseLabels = TRUE,
-#                   col = c('black', 'pink', 'purple', 'red3'),
-#                   colAlpha = 4/5,
-#                   legendPosition = 'right',
-#                   legendLabSize = 14,
-#                   legendIconSize = 4.0,
-#                   drawConnectors = TRUE,
-#                   widthConnectors = .50,
-#                   lengthConnectors = unit(0.01, "npc"),
-#                   colConnectors = 'black') +
-#     coord_flip() +
-#     theme(plot.title = element_text(hjust = 0.0))
-#   return(EV)
-# }
-
-# EnhancedVolcano_function(res_PSC_untidy)
-
-
 
 volcano_UCvsCON <- EnhancedVolcano_function(res_UC_untidy, plottitle="UC vs CON",plotnumber=element_blank())+ 
   theme_linedraw()+
@@ -828,72 +729,13 @@ volcano_PSCUCvsPSC <- EnhancedVolcano_function(res_PSCUC_PSC_untidy[!(rownames(r
   )+
   labs(tag="d)")
 
-# volcano_PSCUCvsPSC <- EnhancedVolcano_function(res_PSCUC_PSC_untidy, plottitle="PSCUC vs PSC_noUC",plotnumber=element_blank())+
-#   labs(tag="d)")+  
-#   theme(legend.position = "right", 
-#         plot.margin = margin(5.5,20,5.5,27, "pt"),
-#         #axis.title.x = element_blank(),
-#         plot.tag.position = c(-.01, .97),
-#         plot.tag = element_text(size = rel(1.5 * size.rel)))
-#
-
-
-#selectLab_italics = paste0(
-#  "italic('",
-#  c('VCAM1','KCTD12','ADAM12', 'CXCL12','CACNB2','SPARCL1','DUSP1','SAMHD1','MAOA'),
-#  "')")
-
-
-# volcano_PSCUCvsPSC <- EnhancedVolcano::EnhancedVolcano(res_PSCUC_PSC_untidy,
-#                                                        title=element_blank(),
-#                                                        subtitle="PSCUC vs PSC_noUC",
-#                                                        caption="",
-#                                                        selectLab = c(paste0("italic('", 'MAN2A1', "')")),
-#                                                        lab = paste0("italic('", rownames(res_PSCUC_PSC_untidy), "')"),
-#                                                        x = 'log2FoldChange',
-#                                                        y = 'padj',
-#                                                        #                  selectLab = selectLab_italics,
-#                                                        xlab = bquote(~Log[2]~ 'fold change'),
-#                                                        max.overlaps = 30,
-#                                                        pCutoff = 1e-02,
-#                                                        #                  FCcutoff = 1.0,
-#                                                        pointSize = 3.0,
-#                                                        labSize = 3.0,
-#                                                        labCol = 'black',
-#                                                        labFace = 'bold',
-#                                                        legendLabels = c("NS", expression(Log[2] ~ FC), "p-value", paste0( expression(~ p - value ~ and),"\n",expression(~ log[2] ~ FC))),
-#                                                        boxedLabels = FALSE,
-#                                                        parseLabels = TRUE,
-#                                                        col = c('black', 'pink', 'purple', 'red3'),
-#                                                        colAlpha = 4/5,
-#                                                        legendPosition = 'right',
-#                                                        legendLabSize = 14,
-#                                                        legendIconSize = 4.0,
-#                                                        drawConnectors = TRUE,
-#                                                        widthConnectors = .50,
-#                                                        lengthConnectors = unit(0.01, "npc"),
-#                                                        colConnectors = 'black') +
-#   coord_flip() +
-#   theme_linedraw()+
-#   theme(plot.title = element_text(hjust = 0.0),
-#         legend.position = "bottom",
-#         legend.title = element_blank(),
-#         plot.margin = margin(5.5,20,5.5,5, "pt"),
-#         #axis.title.x = ,        
-#         plot.tag.position = c(-.01, .97),
-#         plot.tag = element_text(size = rel(1.5 * size.rel)))+
-#   labs(tag="d)")
-
 
 #TopGO enrichments for sign genesets from volcano pvalue and log2 FC:
 sign_UC <- res_UC_tidy[res_UC_tidy$padj < 0.01 & abs(res_UC_tidy$log2FoldChange)>1,]$row
 sign_UC_PSC <-res_UC_PSC_tidy[res_UC_PSC_tidy$padj < 0.01 & abs(res_UC_PSC_tidy$log2FoldChange)>1,]$row
 sign_PSC_CON <-res_PSC_CON_tidy[res_PSC_CON_tidy$padj < 0.01 & abs(res_PSC_CON_tidy$log2FoldChange)>1,]$row
 sign_PSCUC_PSC <-res_PSCUC_PSC_tidy[res_PSCUC_PSC_tidy$padj < 0.01 & abs(res_PSCUC_PSC_tidy$log2FoldChange)>1,]$row #is empty
-# 
-# sign_UC <- sign_UC[!is.na(sign_UC)]
-# sign_UC_PSC <- sign_UC_PSC[!is.na(sign_UC_PSC)]
-# sign_PSC_CON <- sign_PSC_CON[!is.na(sign_PSC_CON)]
+
 
 
 res_UC_CON_topgo <- topGO_enrichment(genelist = sign_UC, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
@@ -918,45 +760,6 @@ sign_PSCUCPSC_CON <- res_PSCandPSCUC_CON_tidy[res_PSCandPSCUC_CON_tidy$padj < 0.
 sign_PSCUCPSC_CON_topgo <- topGO_enrichment(genelist = sign_PSCUCPSC_CON, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
                                             DESeq_result = res_PSCandPSCUC_CON_tidy, match_by_expression = TRUE, ontology_type = "BP")
 fwrite(sign_PSCUCPSC_CON_topgo, file = "output/topgo_PSCUCPSC_CON.csv")
-
-# res_PSCUC_PSC <- topGO_enrichment(genelist = sign_PSCUC_PSC, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
-#                  DESeq_result = res_UC_tidy, match_by_expression = TRUE, ontology_type = "MF")
-# test1 <- assays(dds)[["cooks"]]
-# mcols(dds)$maxCooks <- apply(assays(dds)[["cooks"]], 1, max)
-# plot(mcols(dds)$baseMean, mcols(dds)$maxCooks)
-# # this requires you not filter or order the 'res' object
-# stopifnot(all.equal(rownames(dds), rownames(res_PSC_untidy)))
-# plot(res_PSCUC_PSC_untidy$log2FoldChange, mcols(dds)$maxCooks)
-
-
-# Planell_CON_UC_Diagnose_results
-# Mo_CON_UC_Diagnose_results
-# Ostrowski_CON_UC_Diagnose_results
-# 
-# Ostrowski_CON_PSC_Diagnose_results
-# PSCUCPSC_CON_Diagnose_results
-# PSC_CONTROL_Diagnose_results
-# 
-# #Our Dataset:
-# CON_UC_Diagnose_results
-# PSC_UC_COHORT_results
-# PSC_UC_Diagnose_results
-# PSCUC_UC_Diagnose_results
-# PSC_PSCUC_Diagnose_results
-# 
-# PSCUCPSC_UC_Diagnose_results
-# 
-# 
-# pROC::auc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
-# pROC::ggroc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
-# pROC::ci.auc(Ostrowski_CON_PSC_Diagnose_results$pROC_object)
-
-# 
-# -log(min(c(res_UC_CON_topgo$padj, sign_PSCUCPSC_CON_topgo$padj, res_UC_PSCUCPSC_topgo$padj)), base=10)
-# -log(max(c(res_UC_CON_topgo$padj, sign_PSCUCPSC_CON_topgo$padj, res_UC_PSCUCPSC_topgo$padj)), base=10)
-# 
-# ?coord_cartesian
-# coord_cartesian(xlim(min(c(res_UC_CON_topgo$padj, sign_PSCUCPSC_CON_topgo$padj, res_UC_PSCUCPSC_topgo$padj)), max(c(res_UC_CON_topgo$padj, sign_PSCUCPSC_CON_topgo$padj, res_UC_PSCUCPSC_topgo$padj))))
 
 #GO term plots:
 
@@ -1063,33 +866,6 @@ GO_plot_UC_PSCUCPSC <- ggplot(data=gotermpreview(res_UC_PSCUCPSC_topgo), aes(y=T
          colour=guide_colorbar(direction ="horizontal",title.position = "left",barwidth = unit(2, "inch"))
   )+
   labs(x=bquote(~ - ~Log[10] ~ italic(P- Adjusted)),y=element_blank())
-#res_UC_PSCUCPSC_topgo
-
-
-
-
-
-
-
-
-# theme_linedraw()+
-# theme(legend.position = "bottom", 
-#       # plot.margin = margin(5.5,20,5.5,27, "pt"),
-#       #axis.title.x = element_blank(),        
-#       legend.title = element_blank(),
-#       plot.tag.position = c(-.01, 1.00),
-#       plot.tag = element_text(size = rel(3 * size.rel)),
-#       plot.margin = margin(40,20,5.5,27, "pt"),
-#       legend.text=element_text(size=rel(1.5 * size.rel)),
-#       legend.justification = "left",
-#       axis.title = element_text(size = 16),
-#       axis.text.x = element_text(size = 14),
-#       axis.text.y = element_text(size = 14)
-#       #axis.title.y = element_blank()
-# )+
-# guides(color=guide_legend(nrow=1,byrow=TRUE))+
-# #labs(tag="a)")+
-# coord_flip()
 
 
 # 
@@ -1099,17 +875,6 @@ arranged_volcano <-ggarrange(ncol = 2, nrow=1,
                              ),
                              ggarrange(ncol=1, nrow=5,heights=c(1,1,1,1,0.2), GO_plot_UC_CON, GO_plot_PSCUCPSC_CON, GO_plot_UC_PSCUCPSC+theme(legend.position= "none"), as_ggplot(get_legend(GO_plot_UC_PSCUCPSC))+theme(panel.background = element_rect(fill="white", color = NA)), align ="v")
 )+theme(panel.background = element_rect(fill="white", color = NA))
-
-# arranged_volcano <- ggarrange(ncol = 2, nrow=3,widths=c(1.1,1), heights=c(1,1,1.5),
-#                              align ="h",
-#                              volcano_UCvsCON,GO_plot_UC_CON,
-#                              volcano_PSCvsCON,GO_plot_PSCUCPSC_CON,
-#                              volcano_UCvsPSC,GO_plot_UC_PSCUCPSC
-#                             )
-
-
-
-
 
 
 arranged_volcano
@@ -1256,7 +1021,7 @@ ggsave(arranged_figure3, filename = paste0(fig2_plotname, ".svg"),device = "svg"
 
 
 
-#### FIGURE 5 ####
+#### Supplementary FIGURE 5: Overrepresentation factors in DEG and coexpression modules ####
 ##### RF and DESeq enrichment in cemitool modules barplot #####
 gene_background <- cem_merged_RF@selected_genes
 DT_module<-as.data.table(cem_merged_RF@module)
@@ -1290,12 +1055,7 @@ DT_genesets_modules[,module_enrichment:= percentage_of_geneset/ .SD[model_name==
 DT_genesets_modules[,module_annotation:=ifelse(module_enrichment>2.5,as.character(module_name),NA_character_)]
 DT_genesets_modules[,module_annotation_small:=ifelse(module_enrichment>2,as.character(module_name),NA_character_)]
 
-# ggplot(data = DT_genesets_modules[module_name%in%c(paste0("M",1:11))]) + 
-#   geom_col(mapping = aes(x=module_name,y=percentage_of_geneset,fill=model_name),position=position_dodge2()) + 
-#   coord_flip()
-# ggplot(data = DT_genesets_modules[module_name%in%c(paste0("M",12:21),"Not.Correlated")]) + 
-#   geom_col(mapping = aes(x=module_name,y=percentage_of_geneset,fill=model_name),position=position_dodge2()) + 
-#   coord_flip()
+
 ggplot(data = DT_genesets_modules) + 
   geom_col(mapping = aes(x=model_name,y=percentage_of_geneset,fill=module_name),position=position_dodge2()) + 
   coord_flip()
@@ -1310,33 +1070,6 @@ ggplot(data = DT_genesets_modules[module_name%in%c(paste0("M",10:18))]) +
 
 DT_genesets_modules$model_category <- ifelse(grepl("DEG",DT_genesets_modules$model_name), "DEG","RF")
 
-# gg_genesets_modules <- ggplot(data = DT_genesets_modules[model_name!="total"]) + 
-#   geom_col(mapping = aes(x=model_name,y=module_enrichment,fill=module_name),position=position_dodge2()) + 
-#   geom_text_repel(mapping = aes(
-#     x=model_name,y=module_enrichment  ,label=module_annotation,group=module_name),position = position_dodge(0.9),min.segment.length = 0.1) +
-#   #  scale_fill_manual(values = rainbow(22)[c(22,1,8,15,2,9,16,3,10,17,4,11,18,5,12,19,6,13,20,7,17,21)]) +
-#   scale_fill_manual(values = rainbow(18)[c(18,1,7,13,2,8,14,3,9,15,4,10,16,5,11,17,6,12)]) +
-#   labs(x="gene set", y="overrepresentation factor")+
-#   #
-#   facet_grid(. ~ model_category, drop=TRUE, scales='free'#,space = "free"
-#              )+ 
-#   theme_linedraw()+
-#   
-#   theme(legend.position = "none", 
-#         #plot.margin = margin(5.5,20,5.5,27, "pt"),
-#         #legend.position="none",
-#         #axis.title.x = element_blank(),        
-#         legend.title = element_blank(),
-#         plot.tag.position = c(-.01, .97),
-#         #plot.tag = element_text(size = rel(1.5 * size.rel)),
-#         legend.text=element_text(size=rel(1.5 * size.rel)),
-#         axis.text = element_text(size=unit(17,"points")),
-#         axis.title = element_text(size=unit(17,"points")),
-#         plot.tag =element_text(size=unit(22,"points")),
-#         plot.subtitle = element_text(size=unit(22,"points"))
-#         #axis.title.y = element_blank()
-#   )+coord_flip()
-# gg_genesets_modules
 gg_genesets_modules <- ggarrange(nrow=2,
   ggplot(data = DT_genesets_modules[model_category=="DEG"]) + 
     geom_col(mapping = aes(x=model_name,y=module_enrichment,fill=module_name),position=position_dodge2()) + 
@@ -1352,9 +1085,6 @@ gg_genesets_modules <- ggarrange(nrow=2,
     ) +
     scale_fill_manual(values = rainbow(18)[c(18,1,7,13,2,8,14,3,9,15,4,10,16,5,11,17,6,12)]) +
     labs(x="gene set", y="overrepresentation factor")+
-    #
-    #facet_grid(. ~ model_category, drop=TRUE, scales='free'#,space = "free"
-    #)+ 
     theme_linedraw()+
     
     theme(legend.position = "none", 
@@ -1376,11 +1106,6 @@ gg_genesets_modules <- ggarrange(nrow=2,
     labs(tag="a)"),
   ggplot(data = DT_genesets_modules[model_category=="RF"][model_name!="total"]) + 
     geom_col(mapping = aes(x=model_name,y=module_enrichment,fill=module_name),position=position_dodge2()) + 
-    # geom_text_repel(mapping = aes(
-    #   x=model_name,y=module_enrichment  ,label=module_annotation,group=module_name),position = position_dodge(0.9),
-    #   min.segment.length = 0.1,   size = 5, hjust = 1 #direction = c("both")#label.size = 5.5,
-    #   #nudge_y = 1
-    #   ) +
     geom_label_repel(mapping = aes(
       x=model_name,y=module_enrichment  ,label=module_annotation,group=module_name),position = position_dodge(0.9),
       min.segment.length = 0.1,   size = 5, hjust = 0,direction = 'x', ylim = c(5.5, 7.5) #direction = c("both")#label.size = 5.5,
@@ -1389,9 +1114,6 @@ gg_genesets_modules <- ggarrange(nrow=2,
     #  scale_fill_manual(values = rainbow(22)[c(22,1,8,15,2,9,16,3,10,17,4,11,18,5,12,19,6,13,20,7,17,21)]) +
     scale_fill_manual(values = rainbow(18)[c(18,1,7,13,2,8,14,3,9,15,4,10,16,5,11,17,6,12)]) +
     labs(x="gene set", y="Overrepresentation factor")+
-    #
-    #facet_grid(. ~ model_category, drop=TRUE, scales='free'#,space = "free"
-    #)+ 
     theme_linedraw()+
     
     theme(legend.position = "none", 
@@ -1412,7 +1134,7 @@ gg_genesets_modules <- ggarrange(nrow=2,
     labs(tag="b)")
 )
 
-fwrite(DT_genesets_modules, file = "")
+# fwrite(DT_genesets_modules, file = "")
 
 ggsave(gg_genesets_modules, filename = paste0("output/genesets_modules_signed", ".svg"),device = "svg",width = 10, height = 12)
 ggsave(gg_genesets_modules, filename = paste0("output/genesets_modules_signed", ".pdf"),device = "pdf",width = 10, height = 12)
@@ -1442,25 +1164,6 @@ dev.off()
 png(filename = "output/genesets_modules_zoom_signed.png",height = 8,width=8,units = "in",res = 400)
 gg_genesets_modules_zoom
 dev.off()
-#heatmap nach module skaliert
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ##### RF and DESeq enrichment in cemitool modules barplot #####
@@ -1496,12 +1199,6 @@ DT_genesets_modules[,module_enrichment:= percentage_of_geneset/ .SD[model_name==
 DT_genesets_modules[,module_annotation:=ifelse(module_enrichment>2.5,as.character(module_name),NA_character_)]
 DT_genesets_modules[,module_annotation_small:=ifelse(module_enrichment>2,as.character(module_name),NA_character_)]
 
-# ggplot(data = DT_genesets_modules[module_name%in%c(paste0("M",1:11))]) + 
-#   geom_col(mapping = aes(x=module_name,y=percentage_of_geneset,fill=model_name),position=position_dodge2()) + 
-#   coord_flip()
-# ggplot(data = DT_genesets_modules[module_name%in%c(paste0("M",12:21),"Not.Correlated")]) + 
-#   geom_col(mapping = aes(x=module_name,y=percentage_of_geneset,fill=model_name),position=position_dodge2()) + 
-#   coord_flip()
 ggplot(data = DT_genesets_modules) + 
   geom_col(mapping = aes(x=model_name,y=percentage_of_geneset,fill=module_name),position=position_dodge2()) + 
   coord_flip()
@@ -1552,11 +1249,6 @@ dev.off()
 
 
 # GRAPHICAL ABSTRACT ####
-
-
-# VOLCANO: UC vs PSC | PSC alone vs PSC/UC
-# AUROC: RF UC vs PSC | RF PSC alone vs PSC/UC
-# HEATMAP: Coexpression: Annotation for each cluster
 
 #ggarrange(ncol=1, nrow=2,
 graph_abstract_figure <- ggarrange(ncol = 2, nrow=2,
@@ -1714,58 +1406,12 @@ graph_abstract_figure <- ggarrange(ncol = 2, nrow=2,
             )
           
           )
-#,
-#grid.grabExpr(draw(nes_heatmap, heatmap_legend_side="top"))
-#)
+
 
 
 ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".svg"),device = "svg",width = 9, height = 9,bg="white")
 ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".pdf"),device = "pdf",width = 9, height = 9,bg="white")
-# 
-# nes_matrix <- as.matrix(cem_merged_RF@enrichment$nes[,-1])
-# rownames(nes_matrix) <- cem_merged_RF@enrichment$nes$pathway 
-# set.seed(555555)
-# 
-# #keeping the heatmap order as complex heatmap does not set a seed
-# df_nes_split <- data.frame(row.names = c("M6","M14","M4","M13","M15","M10","M12","M11","M7","M3","M5","M18","M17","M1","M8","M2","M9","M16"), modules = c("M6","M14","M4","M13","M15","M10","M12","M11","M7","M3","M5","M18","M17","M1","M8","M2","M9","M16"), values = c(15,6,13,5,7,2,4,3,16,12,14,10,9,1,17,11,18,8), ind=c(2,2,2,1,1,1,1,1,1,1,4,4,4,5,5,3,3,3))
-# 
-# nes_heatmap2 <- Heatmap(nes_matrix[,c("PSC","PSCUC","UC","Control")], 
-#                        name="NES",
-#                        heatmap_legend_param = list(
-#                          legend_direction = "horizontal", 
-#                          legend_width = unit(6, "cm")),
-#                        height = unit(10, "cm"),
-#                        cluster_columns = FALSE,
-#                        row_km = 5,
-#                        row_km_repeats = 10,
-#                        row_names_side = "left",
-#                        width = unit(14, "cm"),
-#                        column_names_rot = 0, 
-#                        row_title = NULL,
-#                        # column_names_max_height = unit(2, "cm"),
-#                        column_names_side = "bottom",
-#                        column_names_gp = gpar(fontsize = 10)
-# )
-# nes_heatmap2
-# 
-# 
-# 
-# # 
-# # # png("output/NES_heatmap.png",width=7.5,height=7.5,units="in",res=1200)
-# # draw(nes_heatmap, heatmap_legend_side="top")
-# # # dev.off()
-# # nes_hmp <- draw(nes_heatmap, heatmap_legend_side="bottom")
-# nes_hmp <- draw(nes_heatmap2, heatmap_legend_side="top")
-# NES_grob <- grid.grabExpr(draw(nes_hmp))
-# 
-# ggarrange(NES_grob)
-# #grob = grid.grabExpr(draw(Heatmap(...)))
-# 
-# 
-# #df_nes_split <- stack(row_order(nes_hmp))
-# 
-# df_nes_split$modules <- rownames(nes_matrix[,c("PSC","PSCUC","UC","Control")])[df_nes_split$values]
-# rownames(df_nes_split) <- df_nes_split$modules
+
 
 graph_abstract_figure2 <- ggarrange(ncol = 2, nrow=2,
                                    EnhancedVolcano::EnhancedVolcano(res_PSCandPSCUC_CON_untidy,
@@ -1933,6 +1579,104 @@ graph_abstract_figure2 <- ggarrange(ncol = 2, nrow=2,
 graph_abstract_figure2
 ggsave(graph_abstract_figure2, filename = paste0("output/graphical_abstract_figure_alt", ".svg"),device = "svg",width = 9, height = 9,bg="white")
 ggsave(graph_abstract_figure2, filename = paste0("output/graphical_abstract_figure_alt", ".pdf"),device = "pdf",width = 9, height = 9,bg="white")
+
+
+
+
+# Ostrowski_PSC Validation Preparation####
+validation_ostrowski_PSC_cohortname<- "Ostrowski_PSC"
+validation_cohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
+                           Mo_UC="Diagnose",
+                           Planell="Endoscopic\nMayo Score",
+                           Ostrowski_PSC="Diagnose")
+vsd_validation_ostrowski_PSC <- getCohortsVSD(cohortname=validation_ostrowski_PSC_cohortname)
+
+# ostrowski_res <- getCohortsRES(cohortname = "Ostrowski_PSC")
+
+severityscale <- validation_cohorts[[validation_ostrowski_PSC_cohortname]]
+dds_validation_ostrowski_PSC <- getCohortsDDS(cohortname=validation_ostrowski_PSC_cohortname)
+vsd_validation_ostrowski_PSC$severity <- vsd_validation_ostrowski_PSC$Diagnose
+vsd_validation_ostrowski_PSC$severity[is.na(vsd_validation_ostrowski_PSC$severity)] <- "Control"  
+
+# ggplot(as.data.table(t(assay(vsd_validation_ostrowski_PSC)[,])),aes(x=colData(vsd_validation_ostrowski_PSC)$severity,y=S100A6))+geom_boxplot()+geom_jitter(width=0.05)
+
+# res_validation_ostrowski_PSC <- results(dds_validation_ostrowski_PSC, c("Diagnose","Control","UC"),tidy=TRUE)
+# res_validation_ostrowski_PSC[res_validation_ostrowski_PSC$row %in% top25$feature,]
+
+validation_ostrowski_PSC_controls <- ifelse(dds_validation_ostrowski_PSC$Diagnose == "Control",TRUE,FALSE)
+validation_ostrowski_PSC_vst_counts <- data.table((assay(vsd_validation_ostrowski_PSC)[,]))
+
+validation_ostrowski_PSC_z_con_stabilised <- data.table(rn=c(rownames(assay(vsd_validation_ostrowski_PSC))),
+                                                        outlierfiltered_control_transformation(validation_ostrowski_PSC_vst_counts, controlsvector = validation_ostrowski_PSC_controls)
+)
+validation_ostrowski_PSC_z_con_stabilised <- transpose_datatable(validation_ostrowski_PSC_z_con_stabilised)
+
+# Ostrowski PSC RF for validation_ostrowski_PSC Model####
+Ostrowski_genefeatures <- c("rn",rownames(assay(vsd_validation_ostrowski_PSC)))
+sum(colnames(filtered_merged_RF) %in% Ostrowski_genefeatures)
+#we do not find all gene features from our dataset in the mo dataset, so we intersect, rerun RF on our merged dataset and then try to predict outcome in Mo
+
+Ostrowski_PSC_dataset <- data.table(validation_ostrowski_PSC_z_con_stabilised, Diagnose=vsd_validation_ostrowski_PSC$Diagnose)
+
+
+Ostrowski_PSC_dataset <- Ostrowski_PSC_dataset[Diagnose %in% c("PSC","Control"),]
+Ostrowski_PSC_dataset$Diagnose <- droplevels(Ostrowski_PSC_dataset$Diagnose)
+
+filtered_merged_PSCCON_RF <- merged_RF[merged_RF$Cohort == 0,]
+#Diagnose factor: 0=Control, 1=PSC, 2=PSCUC, 3=UC
+
+filtered_merged_PSCCON_RF$Diagnose <- droplevels(factor(filtered_merged_PSCCON_RF$Diagnose))
+#0 = Control, 1= UC
+levels(filtered_merged_PSCCON_RF$Diagnose) <- c(  "0","1","1")#0 = Control, 1= PSC or PSCUC
+
+
+reduced4_merged_RF <- filtered_merged_PSCCON_RF[,intersect(colnames(Ostrowski_PSC_dataset), colnames(filtered_merged_PSCCON_RF)),with=F]
+reduced3_Ostrowski_PSC_RF <- Ostrowski_PSC_dataset[,intersect(colnames(Ostrowski_PSC_dataset), colnames(filtered_merged_PSCCON_RF)),with=F]
+
+
+
+levels(reduced3_Ostrowski_PSC_RF[["Diagnose"]]) <- c(0L,1L)
+
+Ostrowski_CON_PSCPSCUC_Diagnose_results <- performML(dataset = reduced4_merged_RF[,-c("rn")],testing_dataset = reduced3_Ostrowski_PSC_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
+reducedforOstrowski_CON_PSCPSCUC_Diagnose_results <- predictwithatunedmodel(tuned_model = Ostrowski_CON_PSCPSCUC_Diagnose_results$tuned_model, testing_dataset = Ostrowski_CON_PSCPSCUC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
+#Auroc for external validation dataset
+pROC::auc(Ostrowski_CON_PSCPSCUC_Diagnose_results$pROC_object)
+pROC::ci.auc(Ostrowski_CON_PSCPSCUC_Diagnose_results$pROC_object)
+# pROC::ci.auc(Ostrowski_CON_PSCPSCUC_Diagnose_results$pROC_object)
+#validation with own test dataset
+pROC::auc(reducedforOstrowski_CON_PSCPSCUC_Diagnose_results$pROC_object)
+
+
+# Ostrowski UC RF for validation Model####
+Ostrowski_UC_genefeatures <- c("rn",rownames(assay(vsd_validation)))
+#sum(colnames(filtered_merged_RF) %in% Ostrowski_UC_genefeatures)
+#we do not find all gene features from our dataset in the mo dataset, so we intersect, rerun RF on our merged dataset and then try to predict outcome in Mo
+Ostrowski_UC_dataset <- data.table(validation_ostrowski_PSC_z_con_stabilised, Diagnose=vsd_validation_ostrowski_PSC$Diagnose)
+
+Ostrowski_UC_dataset <- Ostrowski_UC_dataset[Diagnose %in% c("UC","Control"),]
+Ostrowski_UC_dataset$Diagnose <- droplevels(Ostrowski_UC_dataset$Diagnose)
+
+
+reduced_merged_RF <- filtered_merged_RF[,intersect(colnames(Ostrowski_UC_dataset), colnames(filtered_merged_RF)),with=F]
+reduced_Ostrowski_UC_RF <- Ostrowski_UC_dataset[,intersect(colnames(Ostrowski_UC_dataset), colnames(filtered_merged_RF)),with=F]
+
+
+Ostrowski_UC_CON_UC_Diagnose_results <- performML(dataset = reduced_merged_RF[,-c("rn")], testing_dataset = reduced_Ostrowski_UC_RF,  splitfactor = 0.5, outcome_column = "Diagnose", seed = seednr)
+
+# pROC::auc(Ostrowski_UC_CON_UC_Diagnose_results$pROC_object)
+# pROC::ci.auc(Ostrowski_UC_CON_UC_Diagnose_results$pROC_object)
+
+reducedforOstrowski_CON_UC_Diagnose_results <- predictwithatunedmodel(tuned_model = Ostrowski_UC_CON_UC_Diagnose_results$tuned_model, testing_dataset = Ostrowski_UC_CON_UC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr)
+#Auroc for external validation dataset
+pROC::auc(Ostrowski_UC_CON_UC_Diagnose_results$pROC_object)
+pROC::ci.auc(Ostrowski_UC_CON_UC_Diagnose_results$pROC_object)
+# pROC::ci.auc(Ostrowski_CON_PSCPSCUC_Diagnose_results$pROC_object)
+#validation with own test dataset
+pROC::auc(reducedforOstrowski_CON_UC_Diagnose_results$pROC_object)
+
+pROC::ci.auc(reducedforOstrowski_CON_UC_Diagnose_results$pROC_object)
+
+
 
 # sessionInfo()
 # R version 4.2.3 (2023-03-15)

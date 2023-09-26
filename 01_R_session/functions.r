@@ -347,72 +347,7 @@ transpose_datatable<- function(datatable){
   return(tdatatable)
 }
 
-LEGACYRandomForestFeatureSelection <- function(table=NULL,set_seed=123, splittestratio=0.5,featuretablesize=50){
-  require(data.table)
-  require(rsample)      # data splitting 
-  require(randomForest) # basic implementation
-  require(tidyverse)
-  require(ranger)
-  require(Information)
-  require(InformationValue)
-  
-  normalisedtable <- table
-  #normalisedtable <- as.data.table(t(assay(vsd)))
-  RFmetadata <- as.data.table(metadata[!(metadata$severity %in% "Unknown")])
-  
-  RFmetadata$Diagnose <- factor(RFmetadata$Diagnose)
-  RFmetadata <- droplevels(RFmetadata)
-  
-  
-  normalisedtable <- as.data.table(sapply(normalisedtable, as.numeric))
-  # normalisedtable <- apply(normalisedtable,2,function(x){x-mean(x)})
-  
-  
-  normalisedtable[,UCpositive:=((as.integer(RFmetadata$Diagnose)-1))]
-  seednr <- set_seed
-  #seednr <- 222
-  set.seed(seednr)
-  splitted <- rsample::initial_split(normalisedtable[,], splittestratio)
-  rftrain <- training(splitted)
-  rftest <- testing(splitted)
-  
-  #infotables_training <- create_infotables(data = rftrain[,], valid = NULL, y="UCpositive")
-  #infotables_test <- create_infotables(data = rftest[,], valid = NULL, y="UCpositive")
-  
-  rftrain$UCpositive <- as.factor(rftrain$UCpositive)
-  rftest$UCpositive <- as.factor(rftest$UCpositive)
-  
-  
-  rfmodel <- ranger(
-    formula         = UCpositive ~ ., 
-    data            = rftrain, 
-    num.trees       = 1000,
-    seed            = seednr,
-    probability     = TRUE,
-    importance      = 'impurity'
-  )
-  
-  predictedmodel <- predict(rfmodel, rftest)
-  predicted <- as.data.table(predictedmodel$predictions)[,2]%>%unlist()%>%as.vector()
-  
-  
-  #evaluate
-  optCutOff <- optimalCutoff(rftest[["UCpositive"]], predicted, optimiseFor = "Both")[1]
-  
-  misClassErrorResult <- misClassError(rftest[["UCpositive"]], predicted, threshold = optCutOff)
-  
-  ROCplotResult <- plotROC(rftest[["UCpositive"]], predicted, returnSensitivityMat=T)
-  
-  rftest[["UCpositive"]]
-  concordanceResult <- InformationValue::Concordance(rftest[["UCpositive"]], predicted)
-  sensitivityResult <- InformationValue::sensitivity(rftest[["UCpositive"]],predicted , threshold = optCutOff)#factor(as.integer(predicted>optCutOff), levels=c(0,1))
-  specificityResult <- InformationValue::specificity(rftest[["UCpositive"]], predicted, threshold = optCutOff)
-  confusionMatrixResult <- InformationValue::confusionMatrix(rftest[["UCpositive"]], predicted)
-  
-  variable_importance <- data.table(feature=names(rfmodel$variable.importance), importance=rfmodel$variable.importance)
-  return_features <- head(variable_importance[order(variable_importance$importance, decreasing=T),],featuretablesize)
-  return(return_features)
-}
+
 
 #Wrapping CEMiTool Analysis with Report-Output:
 setGeneric('generate_report', function(cem, ...) {
@@ -493,30 +428,7 @@ blueprintplot <- function(genes=NULL){
   return(blueprint)
 }
 
-# #return a data table with z-scores for enrichment of specific cell type of given input-genes
-# blueprintenrichments <- function(genes=NULL){
-#   bprint_expression <- fread("../data_rescources/E-MTAB-3827-query-results.tpms.tsv")
-#   bprint_expression_l<-pivot_longer(bprint_expression, 3:29, names_to = "cell_type", values_to = "TPM")%>%as.data.table()
-#   setnames(bprint_expression_l,c("gene_ID","gene_name","cell_type","TPM"))
-#   celltypes_to_keep<-c("mature neutrophil", "erythroblast", "conventional dendritic cell", "macrophage", "CD4-positive, alpha-beta T cell",
-#                        "CD8-positive, alpha-beta T cell", "CD38-negative naive B cell","CD8-positive", "CD14-positive, CD16-negative classical monocyte")
-#   
-#   length_genes_blueprint_intersect<-length(intersect(genes,bprint_expression$`Gene Name`))
-#   genes_blueprint_intersect<-intersect(genes,bprint_expression$`Gene Name`)
-#   bprint_expression_mat<-as.matrix(bprint_expression[`Gene Name`%in%genes,-2:-1],rownames = bprint_expression[`Gene Name`%in%genes,`Gene Name`])
-#   bprint_expression_mat[(bprint_expression_mat)==0]<-min(bprint_expression_mat,na.rm = T)
-#   #make it a z score of the log values
-#   z_bprint_expression_mat<-scale(t(log10(bprint_expression_mat)))
-#   #kick NAs
-#   z_bprint_expression_mat[is.na(z_bprint_expression_mat)]<-min(z_bprint_expression_mat,na.rm = T)
-#   z_bprint_expression_mat_reduced<-z_bprint_expression_mat#[rownames(z_bprint_expression_mat)%in%celltypes_to_keep,]
-#   rownames(z_bprint_expression_mat_reduced) <- gsub("-negative","-",gsub("-positive","+",rownames(z_bprint_expression_mat_reduced)))
-#   
-#   enrichmentstats <- apply(z_bprint_expression_mat_reduced,1,function(x) sum(x)/length(x))
-#   enrichment_df <- data.frame(celltype=names(enrichmentstats),enrichment=enrichmentstats)
-#   # blueprint <- as.ggplot(pheatmap(t(z_bprint_expression_mat_reduced),cluster_rows = F,cluster_cols = F,fontsize=7,border_color=NA,legend=F,show_rownames=F,main="genes",breaks=seq(from=-3,to=3,length.out = 101),silent=F))#,filename="marker_expression_BLUEPRINT_celltypes.png", width = 7, height =7)
-#   return(enrichment_df)
-#   }
+#
 #return a list: First element: data frame with average z-scores for enrichment of specific cell type of given input-genes
 # Second element: matrix with z-scores for enrichment of specific cell type of given input-genes
 blueprintenrichments <- function(genes=NULL){
@@ -550,93 +462,41 @@ blueprintenrichments <- function(genes=NULL){
   return(list(enrichment_df,z_bprint_expression_mat_reduced))
 }
 
-#perform Random Forest in a tidymodels workflow with tuning of parameters. Takes some time. Added multithreading for some performance improvements. 
+
+#perform Random Forest in a caret workflow with tuning of parameters. Takes some time.
 #Needs the training result of training() from the rsample library and the column name of the outcome variable.
-return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL){
-  require(doParallel)
-  require(tidyverse)
-  require(tidymodels)
-  require(tune)
+return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL,seed=123){
+
+  require(ranger)
+  require(caret)
   
-  #Registering all cores: 
-  all_cores <- parallel::detectCores(logical = FALSE)
+  ctrl <- trainControl(method = "cv", number = 5, classProbs = TRUE#, classProbs = TRUE
+  )
   
-  cl <- makePSOCKcluster(all_cores)
-  registerDoParallel(cl)
-  
-  # Models
-  
-  model_rf <- 
-    rand_forest(mtry = tune::tune(), trees = tune::tune(), min_n = tune::tune()) %>% 
-    set_engine("ranger", importance = "impurity") %>% 
-    set_mode("classification")
-  
-  # model_xgboost <- 
-  #   boost_tree(mtry = tune::tune(), trees = tune::tune(), min_n = tune::tune()) %>% 
-  #   set_engine("xgboost", importance = "impurity") %>% 
-  #   set_mode("classification")
-  
-  # Grid of hyperparameters
-  
-  grid_rf <- 
-    grid_max_entropy(
-      mtry(range = c(1, 20)), 
-      trees(range = c(500, 1000)),
-      min_n(range = c(2, 10)),
-      size = 30)
+  hyper_params <- expand.grid(
+    mtry = c(10:15),    # Number of variables randomly sampled at each split
+    min.node.size = c(8:10),  # Minimum node size (terminal nodes)
+    splitrule=c("gini" #,"extratrees"
+    )
+  )
   
   # Formula
   formula_rf <- paste0(outcome_col, " ~ .") %>% as.formula()
   
-  # Workflow
-  
-  wkfl_rf <- 
-    workflow() %>% 
-    add_formula(formula_rf) %>%
-    add_model(model_rf)
-  
-  # wkfl_wgboost <-
-  #   workflow() %>%
-  #   add_formula(Diagnose ~ .) %>%
-  #   add_model(model_xgboost)
-  
-  # Cross validation method
-  
-  cv_folds <- vfold_cv(training_df, v = 5)
-  cv_folds
-  
-  # Choose metrics
-  
-  my_metrics <- metric_set(yardstick::roc_auc, yardstick::accuracy, yardstick::sens, yardstick::spec, yardstick::precision, yardstick::recall)
-  
-  # Tuning
-  
-  rf_fit <- tune::tune_grid(
-    wkfl_rf,
-    resamples = cv_folds,
-    grid = grid_rf,
-    metrics = my_metrics,
-    control = control_grid(verbose = TRUE) # don't save prediction (imho)
+  # Create a random forest model with hyperparameter tuning
+  set.seed(seed)
+  rf_model <- train(
+    formula_rf,            # Replace with your target variable and predictors
+    data = training_df,
+    num.trees = 1000,
+    method = "ranger",
+    trControl = ctrl,
+    tuneGrid = hyper_params,
+    importance = 'impurity'
   )
-  
-  # Fit best model 
-  
-  tuned_model <-
-    wkfl_rf %>% 
-    finalize_workflow(select_best(rf_fit, metric = "accuracy")) %>% 
-    fit(data = training_df)
-  
-  #unregister all cores
-  stopCluster(cl)
-  return(tuned_model)
+  return(rf_model)
 }
 
-# 
-# dataset = reduced2_merged_RF[,-c("rn")]
-# testing_dataset = reduced2_Planell_RF
-# splitfactor = 0.5
-# outcome_column = "Diagnose"
-# seed = seednr
 #make sure outcome_col is a binary factor, there is no sanity test yet in place for this.
 performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome_column=NULL,seed=123){
   require(rsample)
@@ -644,7 +504,10 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   require(InformationValue)
   
   dataset[[outcome_column]] <- base::droplevels(dataset[[outcome_column]])
-  levels(dataset[[outcome_column]]) <- c(0,1)
+  ##tidymodels:
+  #levels(dataset[[outcome_column]]) <- c(0,1)
+  ##ranger:
+  levels(dataset[[outcome_column]]) <- c("yes","no")
   set.seed(seednr)
   splitted <- rsample::initial_split(dataset, splitfactor)
   rftrain <- training(splitted)
@@ -656,8 +519,9 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   
   tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
   
-  
-  # predicted_train <- predict(tuned_model, rftrain, type = "prob")
+  ## tidymodels:
+  # predicted_test <- predict(tuned_model, testing_dataset, type = "prob")
+  #ranger:
   predicted_test <- predict(tuned_model, testing_dataset, type = "prob")
   predicted <- as.data.table(predicted_test)[,2]%>%unlist()%>%as.vector()%>%as.numeric()
   
@@ -677,9 +541,13 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   concordanceResult <- Concordance(testing_dataset[[Resultitem]], predicted)
   sensitivityResult <- InformationValue::sensitivity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
   specificityResult <- InformationValue::specificity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
-  confusionMatrixResult <- confusionMatrix(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  confusionMatrixResult <- InformationValue::confusionMatrix(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
   # confusionMatrixResult
-  variable_importance <- data.table(feature=names(extract_fit_parsnip(tuned_model)$fit$variable.importance), importance=extract_fit_parsnip(tuned_model)$fit$variable.importance)
+  # #Tidymodels:
+  #variable_importance <- data.table(feature=names(extract_fit_parsnip(tuned_model)$fit$variable.importance), importance=extract_fit_parsnip(tuned_model)$fit$variable.importance)
+  # Ranger:
+  variable_importance <- data.table(feature=row.names(varImp(tuned_model)$importance), importance=varImp(tuned_model)$importance[,1])
+  
   variable_importance <- variable_importance[order(variable_importance$importance,decreasing = T),]
   # top25 <- head(variable_importance[order(variable_importance$importance, decreasing=T),],25)
   return_list <- list(rocobject,tuned_model,concordanceResult,sensitivityResult,specificityResult,confusionMatrixResult,variable_importance, rftrain, rftest)
@@ -705,9 +573,13 @@ predictwithatunedmodel <- function(tuned_model=NULL,testing_dataset=NULL,outcome
   concordanceResult <- Concordance(testing_dataset[[Resultitem]], predicted)
   sensitivityResult <- InformationValue::sensitivity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
   specificityResult <- InformationValue::specificity(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
-  confusionMatrixResult <- confusionMatrix(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
+  confusionMatrixResult <- InformationValue::confusionMatrix(testing_dataset[[Resultitem]], predicted, threshold = optCutOff)
   # confusionMatrixResult
-  variable_importance <- data.table(feature=names(extract_fit_parsnip(tuned_model)$fit$variable.importance), importance=extract_fit_parsnip(tuned_model)$fit$variable.importance)
+  # #Tidymodels:
+  #variable_importance <- data.table(feature=names(extract_fit_parsnip(tuned_model)$fit$variable.importance), importance=extract_fit_parsnip(tuned_model)$fit$variable.importance)
+  # Ranger:
+  variable_importance <- data.table(feature=row.names(varImp(tuned_model)$importance), importance=varImp(tuned_model)$importance[,1])
+  
   variable_importance <- variable_importance[order(variable_importance$importance,decreasing = T),]
   # top25 <- head(variable_importance[order(variable_importance$importance, decreasing=T),],25)
   return_list <- list(rocobject,tuned_model,concordanceResult,sensitivityResult,specificityResult,confusionMatrixResult,variable_importance)
