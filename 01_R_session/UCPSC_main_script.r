@@ -82,7 +82,7 @@ merged_metadata$yearssincebinned <- case_when(merged_metadata$yearssincediagnose
           merged_metadata$yearssincediagnose >= 50 & merged_metadata$yearssincediagnose < 60 ~ "SixthDecade",
           is.na(merged_metadata$yearssincediagnose) ~ "Missing")
 
-dds <- DESeqDataSetFromMatrix(countData=merged_rawcounts, colData=merged_metadata, design= ~Diagnose + PlateNr + yearssincebinned)
+dds <- DESeqDataSetFromMatrix(countData=merged_rawcounts, colData=merged_metadata, design= ~Diagnose + PlateNr)# + yearssincebinned
 dds <- DESeq(dds)
 vsd <- vst(dds, blind=FALSE)
 
@@ -497,7 +497,7 @@ nes_heatmap <- Heatmap(nes_matrix,
 )
 
 
-png("output/NES_heatmap.png",width=7.5,height=7.5,units="in",res=1200)
+png("output/figure3_nesheatmap.png",width=7.5,height=7.5,units="in",res=1200)
 draw(nes_heatmap, heatmap_legend_side="top")
 dev.off()
 
@@ -732,13 +732,13 @@ volcano_PSCUCvsPSC <- EnhancedVolcano_function(res_PSCUC_PSC_untidy[!(rownames(r
 
 #TopGO enrichments for sign genesets from volcano pvalue and log2 FC:
 sign_UC <- res_UC_tidy[res_UC_tidy$padj < 0.01 & abs(res_UC_tidy$log2FoldChange)>1,]$row
-sign_UC_PSC <-res_UC_PSC_tidy[res_UC_PSC_tidy$padj < 0.01 & abs(res_UC_PSC_tidy$log2FoldChange)>1,]$row
-sign_PSC_CON <-res_PSC_CON_tidy[res_PSC_CON_tidy$padj < 0.01 & abs(res_PSC_CON_tidy$log2FoldChange)>1,]$row
+sign_UC_PSC <-res_UC_PSC_tidy[res_UC_PSC_tidy$padj < 0.01 & abs(res_UC_PSC_tidy$log2FoldChange)>1,]$row %>% .[!is.na(.)]
+sign_PSC_CON <-res_PSC_CON_tidy[res_PSC_CON_tidy$padj < 0.01 & abs(res_PSC_CON_tidy$log2FoldChange)>1,]$row %>% .[!is.na(.)]
 sign_PSCUC_PSC <-res_PSCUC_PSC_tidy[res_PSCUC_PSC_tidy$padj < 0.01 & abs(res_PSCUC_PSC_tidy$log2FoldChange)>1,]$row #is empty
 
 
 
-res_UC_CON_topgo <- topGO_enrichment(genelist = sign_UC, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
+res_UC_CON_topgo <- topGO_enrichment(genelist = sign_UC, statistical_test = "Fisher", gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature,
                                      DESeq_result = res_UC_tidy, match_by_expression = TRUE, ontology_type = "BP")
 res_UC_PSC_topgo <- topGO_enrichment(genelist = sign_UC_PSC, statistical_test = "Fisher", #gene_background = PSCUC_UC_Diagnose_results$variable_importance$feature
                                      DESeq_result = res_UC_tidy, match_by_expression = TRUE, ontology_type = "BP")
@@ -882,7 +882,7 @@ plot_width=16
 #plot_height=18
 plot_height=24
 #plotname <- "output/VolcanoplotRNAseq"
-plotname <- "output/figure1"
+plotname <- "output/figure2"
 
 
 
@@ -985,7 +985,7 @@ auroc_plot_PSCPSCUC_UC <- plot_pROC_rocs(proclist = list(PSC_PSCUC_Diagnose_resu
 )
 
 
-arranged_figure3 <- ggarrange(ncol = 1, nrow=2, align = "v",
+arranged_figure4 <- ggarrange(ncol = 1, nrow=2, align = "v",
                               ggarrange(ncol=2,nrow=1,align="v",auroc_plot_PSC_UC_COHORT_controls+ theme(legend.text=element_text(size=12))
                                         , UC_CON_plot+ theme(legend.text=element_text(size=12))
                                         ,labels= c("a)", "b)"),font.label = list(size = 24, color = "black", face = "plain", 
@@ -1007,17 +1007,17 @@ arranged_figure3 <- ggarrange(ncol = 1, nrow=2, align = "v",
 )+
   theme(panel.background = element_rect(fill="white", color = NA))
 
-arranged_figure3
+arranged_figure4
 
 # fig2_plot_width=16
 # fig2_plot_height=18
 fig2_plot_width=12
 # fig2_plot_height=18
 fig2_plot_height=12
-fig2_plotname <- "output/figure3"
-ggsave(arranged_figure3, filename = paste0(fig2_plotname, ".pdf"),device = "pdf",width = fig2_plot_width, height = fig2_plot_height)
-ggsave(arranged_figure3, filename = paste0(fig2_plotname, ".png"),device = "png",width = fig2_plot_width, height = fig2_plot_height)
-ggsave(arranged_figure3, filename = paste0(fig2_plotname, ".svg"),device = "svg",width = fig2_plot_width, height = fig2_plot_height)
+fig2_plotname <- "output/figure4"
+ggsave(arranged_figure4, filename = paste0(fig2_plotname, ".pdf"),device = "pdf",width = fig2_plot_width, height = fig2_plot_height)
+ggsave(arranged_figure4, filename = paste0(fig2_plotname, ".png"),device = "png",width = fig2_plot_width, height = fig2_plot_height)
+ggsave(arranged_figure4, filename = paste0(fig2_plotname, ".svg"),device = "svg",width = fig2_plot_width, height = fig2_plot_height)
 
 
 
@@ -1136,15 +1136,15 @@ gg_genesets_modules <- ggarrange(nrow=2,
 
 # fwrite(DT_genesets_modules, file = "")
 
-ggsave(gg_genesets_modules, filename = paste0("output/genesets_modules_signed", ".svg"),device = "svg",width = 10, height = 12)
-ggsave(gg_genesets_modules, filename = paste0("output/genesets_modules_signed", ".pdf"),device = "pdf",width = 10, height = 12)
-ggsave(gg_genesets_modules, filename = paste0("output/genesets_modules_signed", ".png"),device = "png",width = 10, height = 12)
+ggsave(gg_genesets_modules, filename = paste0("output/Supfig5_genesets", ".svg"),device = "svg",width = 10, height = 12)
+ggsave(gg_genesets_modules, filename = paste0("output/Supfig5_genesets", ".pdf"),device = "pdf",width = 10, height = 12)
+ggsave(gg_genesets_modules, filename = paste0("output/Supfig5_genesets", ".png"),device = "png",width = 10, height = 12)
 
 
-svg(filename = "output/genesets_modules_signed.svg",height = 8,width=6)
+svg(filename = "output/Supfig5_genesets.svg",height = 8,width=6)
 gg_genesets_modules
 dev.off()
-png(filename = "output/genesets_modules_signed.png",height = 8,width=6,units = "in",res = 400)
+png(filename = "output/Supfig5_genesets.png",height = 8,width=6,units = "in",res = 400)
 gg_genesets_modules
 dev.off()
 
@@ -1221,10 +1221,10 @@ gg_genesets_modules <- ggplot(data = DT_genesets_modules[model_name!="total"]) +
   theme(legend.position="none") +
   labs(x="gene set", y="overrepresentation factor")+
   coord_flip()
-svg(filename = "output/genesets_modules_signed.svg",height = 8,width=6)
+svg(filename = "output/Supfig5_genesets.svg",height = 8,width=6)
 gg_genesets_modules
 dev.off()
-png(filename = "output/genesets_modules_signed.png",height = 8,width=6,units = "in",res = 400)
+png(filename = "output/Supfig5_genesets.png",height = 8,width=6,units = "in",res = 400)
 gg_genesets_modules
 dev.off()
 
@@ -1250,167 +1250,167 @@ dev.off()
 
 # GRAPHICAL ABSTRACT ####
 
-#ggarrange(ncol=1, nrow=2,
-graph_abstract_figure <- ggarrange(ncol = 2, nrow=2,
-          EnhancedVolcano::EnhancedVolcano(res_PSCandPSCUC_CON_untidy,
-                                           title=element_blank(),
-                                           subtitle="PSC+PSC/UC vs CON",
-                                           caption="",
-                                           selectLab = c(""),
-                                           lab = paste0("italic('", rownames(res_PSCandPSCUC_CON_untidy), "')"),
-                                           x = 'log2FoldChange',
-                                           y = 'padj',
-                                           xlim = c(min(res[['log2FoldChange']], na.rm = TRUE) - 0.1, max(res[['log2FoldChange']], na.rm = TRUE) +
-                                                      0.1),
-                                           ylab = bquote(~- ~ Log[10] ~ italic(P- Adjusted)),
-                                           #                  selectLab = selectLab_italics,
-                                           xlab = bquote(~Log[2]~ 'fold change'),
-                                           max.overlaps = 30,
-                                           pCutoff = 1e-02,
-                                           #                  FCcutoff = 1.0,
-                                           pointSize = 3.0,
-                                           labSize = 3,
-                                           labCol = 'black',
-                                           labFace = 'bold',
-                                           legendLabels = c("NS", expression(Log[2] ~ FC), "p - Adjusted", expression(p - ~ Adjusted ~ and
-                                                                                                                      ~ log[2] ~ FC)), #c("NS", expression(Log[2] ~ FC), "p-value", paste0("P-Adjusted and ",expression(Log[2] ~ FC))),#expression(p - value ~ and ~ log[2] ~ FC)),
-                                           boxedLabels = FALSE,
-                                           parseLabels = TRUE,
-                                           col = c('black', 'pink', 'purple', 'red3'),
-                                           colAlpha = 4/5,
-                                           legendPosition = 'right',
-                                           legendLabSize = 14,
-                                           legendIconSize = 4.0,
-                                           drawConnectors = FALSE,
-                                           widthConnectors = .50,
-                                           lengthConnectors = unit(0.01, "npc"),
-                                           colConnectors = 'black') +
-            coord_flip() +theme_linedraw()+
-            theme(plot.title = element_text(hjust = 0.0),
-                  legend.position= "none",
-                  plot.margin = margin(5.5,20,5.5,27, "pt"),
-                  #axis.title.x = element_blank(),        
-                  legend.title = element_blank(),
-                  plot.tag.position = c(-.01, .97),
-                  #plot.tag = element_text(size = rel(1.5 * size.rel)),
-                  legend.text=element_text(size=rel(1.5 * size.rel)),
-                  axis.text = element_text(size=unit(17,"points")),
-                  axis.title = element_text(size=unit(17,"points")),
-                  plot.tag =element_text(size=unit(22,"points")),
-                  plot.subtitle = element_text(size=unit(22,"points"))
-                  #axis.title.y = element_blank()),
-            ),
-                                      EnhancedVolcano::EnhancedVolcano(res_PSCUC_PSC_untidy[!(rownames(res_PSCUC_PSC_untidy) %in% "MAN2A1"),],
-                                                                       title=element_blank(),
-                                                                       subtitle="PSC/UC vs PSC alone",
-                                                                       caption="",
-                                                                       selectLab = c(""),
-                                                                       lab = paste0("italic('", rownames(res_PSCUC_PSC_untidy[!(rownames(res_PSCUC_PSC_untidy) %in% "MAN2A1"),]), "')"),
-                                                                       x = 'log2FoldChange',
-                                                                       y = 'padj',
-                                                                       xlim = c(min(res[['log2FoldChange']], na.rm = TRUE) - 0.1, max(res[['log2FoldChange']], na.rm = TRUE) +
-                                                                                  0.1),
-                                                                       ylab = bquote(~- ~ Log[10] ~ italic(P- Adjusted)),
-                                                                       #                  selectLab = selectLab_italics,
-                                                                       xlab = bquote(~Log[2]~ 'fold change'),
-                                                                       max.overlaps = 30,
-                                                                       pCutoff = 1e-02,
-                                                                       #                  FCcutoff = 1.0,
-                                                                       pointSize = 3.0,
-                                                                       labSize = 3,
-                                                                       labCol = 'black',
-                                                                       labFace = 'bold',
-                                                                       legendLabels = c("NS", expression(Log[2] ~ FC), "p - Adjusted", expression(p - ~ Adjusted ~ and
-                                                                                                                                                  ~ log[2] ~ FC)), #c("NS", expression(Log[2] ~ FC), "p-value", paste0("P-Adjusted and ",expression(Log[2] ~ FC))),#expression(p - value ~ and ~ log[2] ~ FC)),
-                                                                       boxedLabels = FALSE,
-                                                                       parseLabels = TRUE,
-                                                                       col = c('black', 'pink', 'purple', 'red3'),
-                                                                       colAlpha = 4/5,
-                                                                       legendPosition = 'right',
-                                                                       legendLabSize = 14,
-                                                                       legendIconSize = 4.0,
-                                                                       drawConnectors = FALSE,
-                                                                       widthConnectors = .50,
-                                                                       lengthConnectors = unit(0.01, "npc"),
-                                                                       colConnectors = 'black') +
-                                                                        coord_flip() +
-                                                                        theme_linedraw()+
-                                                                        theme(plot.title = element_text(hjust = 0.0),
-                                                                              legend.position= "none",
-                                                                              plot.margin = margin(5.5,20,5.5,27, "pt"),
-                                                                              #axis.title.x = element_blank(),        
-                                                                              legend.title = element_blank(),
-                                                                              plot.tag.position = c(-.01, .97),
-                                                                              #plot.tag = element_text(size = rel(1.5 * size.rel)),
-                                                                              legend.text=element_text(size=rel(1.5 * size.rel)),
-                                                                              axis.text = element_text(size=unit(17,"points")),
-                                                                              axis.title = element_text(size=unit(17,"points")),
-                                                                              plot.tag =element_text(size=unit(22,"points")),
-                                                                              plot.subtitle = element_text(size=unit(22,"points"))
-                                                                              #axis.title.y = element_blank()),
-                                                                        ),
-                              plot_pROC_rocs(
-                                proclist = list(PSC_CONTROL_Diagnose_results$pROC_object
-                                                               #PSCUC_CON_Diagnose_results$pROC_object,
-                                                               #PSCUCPSC_CON_Diagnose_results$pROC_object
-                                ), 
-                                procnames = c("PSC vs Control"
-                                              #"PSC/UC vs Control",
-                                              #"(ii)  PSC + PSC/UC vs Control"
-                                              ),
-                                plot_tag = element_blank(), 
-                                plot_title="PSC alone + PSC/UC \nvs Control",
-                                setcolors = c("#D35A45", "#3B668B","#E0812E")
-                              )+
-                                theme(plot.title = element_text(hjust = 0.0,
-                                                                                    size=unit(22,"points")),
-                                                          #legend.position= "none",
-                                                          plot.margin = margin(5.5,20,5.5,27, "pt"),
-                                                          #axis.title.x = element_blank(),        
-                                                          #legend.title = element_blank(),
-                                                          plot.tag.position = c(-.01, .97),
-                                                          #plot.tag = element_text(size = rel(1.5 * size.rel)),
-                                                          legend.text=element_text(size=rel(1.5 * size.rel)),
-                                                          axis.text = element_text(size=unit(17,"points")),
-                                                          axis.title = element_text(size=unit(17,"points")),
-                                                          plot.tag =element_text(size=unit(22,"points")),
-                                                          plot.subtitle = element_text(size=unit(22,"points"))
-                                                          #axis.title.y = element_blank()),
-                                                  ),
-                          plot_pROC_rocs(
-                                         proclist = list(PSC_PSCUC_Diagnose_results$pROC_object
-                                                         #PSCUCPSC_UC_Diagnose_results$pROC_object
-                                                         ), 
-                                         procnames = c("(iv) PSC vs PSC/UC"
-                                                       #"(iii) PSC+PSC/UC vs UC"
-                                                       ),
-                                         plot_tag = element_blank(), 
-                                         plot_title="PSC alone vs \nPSC/UC",
-                                         setcolors = c("#5E912A","#D69FB3","#A6A6A6")
-                                         #brewer.pal(12, "Set3")[7:9]#c("green","dimgray","black")
-                          )+#theme(plot.title = element_text(size=unit(22,"points")))
-            theme(plot.title = element_text(hjust = 0.0,
-                                            size=unit(22,"points")),
-                  #legend.position= "none",
-                  plot.margin = margin(5.5,20,5.5,27, "pt"),
-                  #axis.title.x = element_blank(),        
-                  #legend.title = element_blank(),
-                  plot.tag.position = c(-.01, .97),
-                  #plot.tag = element_text(size = rel(1.5 * size.rel)),
-                  legend.text=element_text(size=rel(1.5 * size.rel)),
-                  axis.text = element_text(size=unit(17,"points")),
-                  axis.title = element_text(size=unit(17,"points")),
-                  plot.tag =element_text(size=unit(22,"points")),
-                  plot.subtitle = element_text(size=unit(22,"points"))
-                  #axis.title.y = element_blank()),
-            )
-          
-          )
-
-
-
-ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".svg"),device = "svg",width = 9, height = 9,bg="white")
-ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".pdf"),device = "pdf",width = 9, height = 9,bg="white")
+# #ggarrange(ncol=1, nrow=2,
+# graph_abstract_figure <- ggarrange(ncol = 2, nrow=2,
+#           EnhancedVolcano::EnhancedVolcano(res_PSCandPSCUC_CON_untidy,
+#                                            title=element_blank(),
+#                                            subtitle="PSC+PSC/UC vs CON",
+#                                            caption="",
+#                                            selectLab = c(""),
+#                                            lab = paste0("italic('", rownames(res_PSCandPSCUC_CON_untidy), "')"),
+#                                            x = 'log2FoldChange',
+#                                            y = 'padj',
+#                                            xlim = c(min(res[['log2FoldChange']], na.rm = TRUE) - 0.1, max(res[['log2FoldChange']], na.rm = TRUE) +
+#                                                       0.1),
+#                                            ylab = bquote(~- ~ Log[10] ~ italic(P- Adjusted)),
+#                                            #                  selectLab = selectLab_italics,
+#                                            xlab = bquote(~Log[2]~ 'fold change'),
+#                                            max.overlaps = 30,
+#                                            pCutoff = 1e-02,
+#                                            #                  FCcutoff = 1.0,
+#                                            pointSize = 3.0,
+#                                            labSize = 3,
+#                                            labCol = 'black',
+#                                            labFace = 'bold',
+#                                            legendLabels = c("NS", expression(Log[2] ~ FC), "p - Adjusted", expression(p - ~ Adjusted ~ and
+#                                                                                                                       ~ log[2] ~ FC)), #c("NS", expression(Log[2] ~ FC), "p-value", paste0("P-Adjusted and ",expression(Log[2] ~ FC))),#expression(p - value ~ and ~ log[2] ~ FC)),
+#                                            boxedLabels = FALSE,
+#                                            parseLabels = TRUE,
+#                                            col = c('black', 'pink', 'purple', 'red3'),
+#                                            colAlpha = 4/5,
+#                                            legendPosition = 'right',
+#                                            legendLabSize = 14,
+#                                            legendIconSize = 4.0,
+#                                            drawConnectors = FALSE,
+#                                            widthConnectors = .50,
+#                                            lengthConnectors = unit(0.01, "npc"),
+#                                            colConnectors = 'black') +
+#             coord_flip() +theme_linedraw()+
+#             theme(plot.title = element_text(hjust = 0.0),
+#                   legend.position= "none",
+#                   plot.margin = margin(5.5,20,5.5,27, "pt"),
+#                   #axis.title.x = element_blank(),        
+#                   legend.title = element_blank(),
+#                   plot.tag.position = c(-.01, .97),
+#                   #plot.tag = element_text(size = rel(1.5 * size.rel)),
+#                   legend.text=element_text(size=rel(1.5 * size.rel)),
+#                   axis.text = element_text(size=unit(17,"points")),
+#                   axis.title = element_text(size=unit(17,"points")),
+#                   plot.tag =element_text(size=unit(22,"points")),
+#                   plot.subtitle = element_text(size=unit(22,"points"))
+#                   #axis.title.y = element_blank()),
+#             ),
+#                                       EnhancedVolcano::EnhancedVolcano(res_PSCUC_PSC_untidy[!(rownames(res_PSCUC_PSC_untidy) %in% "MAN2A1"),],
+#                                                                        title=element_blank(),
+#                                                                        subtitle="PSC/UC vs PSC alone",
+#                                                                        caption="",
+#                                                                        selectLab = c(""),
+#                                                                        lab = paste0("italic('", rownames(res_PSCUC_PSC_untidy[!(rownames(res_PSCUC_PSC_untidy) %in% "MAN2A1"),]), "')"),
+#                                                                        x = 'log2FoldChange',
+#                                                                        y = 'padj',
+#                                                                        xlim = c(min(res[['log2FoldChange']], na.rm = TRUE) - 0.1, max(res[['log2FoldChange']], na.rm = TRUE) +
+#                                                                                   0.1),
+#                                                                        ylab = bquote(~- ~ Log[10] ~ italic(P- Adjusted)),
+#                                                                        #                  selectLab = selectLab_italics,
+#                                                                        xlab = bquote(~Log[2]~ 'fold change'),
+#                                                                        max.overlaps = 30,
+#                                                                        pCutoff = 1e-02,
+#                                                                        #                  FCcutoff = 1.0,
+#                                                                        pointSize = 3.0,
+#                                                                        labSize = 3,
+#                                                                        labCol = 'black',
+#                                                                        labFace = 'bold',
+#                                                                        legendLabels = c("NS", expression(Log[2] ~ FC), "p - Adjusted", expression(p - ~ Adjusted ~ and
+#                                                                                                                                                   ~ log[2] ~ FC)), #c("NS", expression(Log[2] ~ FC), "p-value", paste0("P-Adjusted and ",expression(Log[2] ~ FC))),#expression(p - value ~ and ~ log[2] ~ FC)),
+#                                                                        boxedLabels = FALSE,
+#                                                                        parseLabels = TRUE,
+#                                                                        col = c('black', 'pink', 'purple', 'red3'),
+#                                                                        colAlpha = 4/5,
+#                                                                        legendPosition = 'right',
+#                                                                        legendLabSize = 14,
+#                                                                        legendIconSize = 4.0,
+#                                                                        drawConnectors = FALSE,
+#                                                                        widthConnectors = .50,
+#                                                                        lengthConnectors = unit(0.01, "npc"),
+#                                                                        colConnectors = 'black') +
+#                                                                         coord_flip() +
+#                                                                         theme_linedraw()+
+#                                                                         theme(plot.title = element_text(hjust = 0.0),
+#                                                                               legend.position= "none",
+#                                                                               plot.margin = margin(5.5,20,5.5,27, "pt"),
+#                                                                               #axis.title.x = element_blank(),        
+#                                                                               legend.title = element_blank(),
+#                                                                               plot.tag.position = c(-.01, .97),
+#                                                                               #plot.tag = element_text(size = rel(1.5 * size.rel)),
+#                                                                               legend.text=element_text(size=rel(1.5 * size.rel)),
+#                                                                               axis.text = element_text(size=unit(17,"points")),
+#                                                                               axis.title = element_text(size=unit(17,"points")),
+#                                                                               plot.tag =element_text(size=unit(22,"points")),
+#                                                                               plot.subtitle = element_text(size=unit(22,"points"))
+#                                                                               #axis.title.y = element_blank()),
+#                                                                         ),
+#                               plot_pROC_rocs(
+#                                 proclist = list(PSC_CONTROL_Diagnose_results$pROC_object
+#                                                                #PSCUC_CON_Diagnose_results$pROC_object,
+#                                                                #PSCUCPSC_CON_Diagnose_results$pROC_object
+#                                 ), 
+#                                 procnames = c("PSC vs Control"
+#                                               #"PSC/UC vs Control",
+#                                               #"(ii)  PSC + PSC/UC vs Control"
+#                                               ),
+#                                 plot_tag = element_blank(), 
+#                                 plot_title="PSC alone + PSC/UC \nvs Control",
+#                                 setcolors = c("#D35A45", "#3B668B","#E0812E")
+#                               )+
+#                                 theme(plot.title = element_text(hjust = 0.0,
+#                                                                                     size=unit(22,"points")),
+#                                                           #legend.position= "none",
+#                                                           plot.margin = margin(5.5,20,5.5,27, "pt"),
+#                                                           #axis.title.x = element_blank(),        
+#                                                           #legend.title = element_blank(),
+#                                                           plot.tag.position = c(-.01, .97),
+#                                                           #plot.tag = element_text(size = rel(1.5 * size.rel)),
+#                                                           legend.text=element_text(size=rel(1.5 * size.rel)),
+#                                                           axis.text = element_text(size=unit(17,"points")),
+#                                                           axis.title = element_text(size=unit(17,"points")),
+#                                                           plot.tag =element_text(size=unit(22,"points")),
+#                                                           plot.subtitle = element_text(size=unit(22,"points"))
+#                                                           #axis.title.y = element_blank()),
+#                                                   ),
+#                           plot_pROC_rocs(
+#                                          proclist = list(PSC_PSCUC_Diagnose_results$pROC_object
+#                                                          #PSCUCPSC_UC_Diagnose_results$pROC_object
+#                                                          ), 
+#                                          procnames = c("(iv) PSC vs PSC/UC"
+#                                                        #"(iii) PSC+PSC/UC vs UC"
+#                                                        ),
+#                                          plot_tag = element_blank(), 
+#                                          plot_title="PSC alone vs \nPSC/UC",
+#                                          setcolors = c("#5E912A","#D69FB3","#A6A6A6")
+#                                          #brewer.pal(12, "Set3")[7:9]#c("green","dimgray","black")
+#                           )+#theme(plot.title = element_text(size=unit(22,"points")))
+#             theme(plot.title = element_text(hjust = 0.0,
+#                                             size=unit(22,"points")),
+#                   #legend.position= "none",
+#                   plot.margin = margin(5.5,20,5.5,27, "pt"),
+#                   #axis.title.x = element_blank(),        
+#                   #legend.title = element_blank(),
+#                   plot.tag.position = c(-.01, .97),
+#                   #plot.tag = element_text(size = rel(1.5 * size.rel)),
+#                   legend.text=element_text(size=rel(1.5 * size.rel)),
+#                   axis.text = element_text(size=unit(17,"points")),
+#                   axis.title = element_text(size=unit(17,"points")),
+#                   plot.tag =element_text(size=unit(22,"points")),
+#                   plot.subtitle = element_text(size=unit(22,"points"))
+#                   #axis.title.y = element_blank()),
+#             )
+#           
+#           )
+# 
+# 
+# 
+# ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".svg"),device = "svg",width = 9, height = 9,bg="white")
+# ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".pdf"),device = "pdf",width = 9, height = 9,bg="white")
 
 
 graph_abstract_figure2 <- ggarrange(ncol = 2, nrow=2,
@@ -1675,6 +1675,230 @@ pROC::ci.auc(Ostrowski_UC_CON_UC_Diagnose_results$pROC_object)
 pROC::auc(reducedforOstrowski_CON_UC_Diagnose_results$pROC_object)
 
 pROC::ci.auc(reducedforOstrowski_CON_UC_Diagnose_results$pROC_object)
+
+
+# Supplement Figure 3 ####
+
+
+# nes_matrix2 <- as.matrix(cem_merged_RF@enrichment$nes[,-1])
+# rownames(nes_matrix2) <- cem_merged_RF@enrichment$nes$pathway 
+
+nes_heatmap2 <- Heatmap(nes_matrix[,c("PSC","PSCUC","UC","Control")], 
+                       name="NES",
+                       heatmap_legend_param = list(
+                         legend_direction = "horizontal", 
+                         legend_width = unit(6, "cm")),
+                       height = unit(10, "cm"),
+                       cluster_columns = FALSE,
+                       row_km = 5,
+                       row_km_repeats = 10,
+                       row_names_side = "left",
+                       width = unit(14, "cm"),
+                       column_names_rot = 0, 
+                       row_title = NULL,
+                       # column_names_max_height = unit(2, "cm"),
+                       column_names_side = "bottom",
+                       column_names_gp = gpar(fontsize = 10)
+)
+
+# 
+
+nes_hmp <- draw(nes_heatmap2, heatmap_legend_side="top")
+NES_grob <- grid.grabExpr(draw(nes_hmp))
+#grob = grid.grabExpr(draw(Heatmap(...)))
+df_nes_split <- stack(row_order(nes_hmp))
+
+df_nes_split$modules <- rownames(nes_matrix[,c("PSC","PSCUC","UC","Control")])[df_nes_split$values]
+rownames(df_nes_split) <- df_nes_split$modules
+#df_nes_split[rownames(nes_matrix),"ind"]
+
+DT_ora <- as.data.table(cem_merged_RF@ora)[p.adjust<0.05]
+catchphrases <- c("neutrophil","T cell", "B cell", "killer cell", "platelet", "eosinophil", "macrophage", "dendritic", #cell types
+                  "cell cycle","chemotaxis","cell death","defense","immune response","stress","signaling","splicing","metabolic","differentiation","migration", #cell states and functions
+                  "RNA","mRNA","tRNA","rRNA","ncRNA","expression","ubiquitin","mitochond","ER","golgi","transcript","ribosom", #cell biology
+                  "interleukin","interferon","NF-kappaB","wnt" #signaling componds, pathways
+)
+#modules <- c(paste0("M",1:21),"Not.Correlated")
+modules <- c(paste0("M",1:18))#,"Not.Correlated")
+DT_ora_catchphrases <- data.table(module=rep(modules,length(catchphrases)),catchphrase=rep(catchphrases,each=length(modules)))
+
+for (i in 1:length(catchphrases)) {
+  DT_ora_catchphrases[catchphrase==catchphrases[i],found:=case_when(catchphrase==catchphrases[i] & module %in% DT_ora[grepl(catchphrases[i],DT_ora$ID,ignore.case = T),Module] ~ 1,
+                                                                    TRUE ~ 0)]
+}
+DT_ora_catchphrases[catchphrase=="ER",found := case_when(catchphrase=="ER" & module %in% DT_ora[grepl("ER",DT_ora$ID,ignore.case = F),Module] ~ 1,
+                                                         TRUE ~ 0)]
+DT_ora_catchphrases_wide <- pivot_wider(data=DT_ora_catchphrases,names_from = "catchphrase",values_from = "found") %>%as.data.table()
+ora_matrix <- as.matrix(DT_ora_catchphrases_wide[,-1],dimnames=list(DT_ora_catchphrases_wide$module,colnames(DT_ora_catchphrases_wide)[-1]))
+dimnames(ora_matrix) <- list(DT_ora_catchphrases_wide$module,colnames(DT_ora_catchphrases_wide)[-1])
+ora_heatmap <- Heatmap(ora_matrix[df_nes_split$modules,], 
+                       col=c("white","turquoise"),
+                       name="ORA",
+                       show_heatmap_legend = FALSE,
+                       #heatmap_legend_param = list(
+                       # legend_direction = "horizontal", 
+                       #legend_width = unit(6, "cm")),
+                       height = unit(10, "cm"),
+                       cluster_rows = F,
+                       clustering_distance_columns = "manhattan",
+                       row_names_side = "left",
+                       width = unit(14, "cm"),
+                       column_names_rot = 90, 
+                       border="grey70",
+                       row_split = df_nes_split[#rownames(nes_matrix),
+                         "ind"],
+                       rect_gp = gpar(col = "grey70"),
+                       # column_names_max_height = unit(2, "cm"),
+                       #column_title = "GO term catchphrase",
+                       column_title = element_blank(),
+                       column_title_gp = gpar(fontsize=12),
+                       column_title_side = "bottom",
+                       column_names_side = "bottom",
+                       column_names_gp = gpar(fontsize = 10),
+                       row_title = NULL
+                       # column_ti
+)
+
+
+# png("output/ORA_heatmap_signed.png",width=7.5,height=7.5,units="in",res=1200)
+# draw(ora_heatmap)
+
+GOcatchterm_grob <- grid.grabExpr(draw(ora_heatmap))#, heatmap_legend_side="top"))
+# dev.off()
+# DT_ora_catchphrases_wide[1,-1] %>% unlist()
+# DT_ora_catchphrases_wide_pasted <-data.table(module=DT_ora_catchphrases_wide$module,catchphrase_concat=NA_character_)
+# for (i in 1:nrow(DT_ora_catchphrases_wide_pasted)) {
+#   set(DT_ora_catchphrases_wide_pasted,i=i,j="catchphrase_concat",value=paste(names(unlist(DT_ora_catchphrases_wide[i,-1]))[unlist(DT_ora_catchphrases_wide[i,-1])==1],collapse = ", "))
+# }
+# fwrite(DT_ora_catchphrases_wide_pasted,file="output/DT_ora_catchphrases_wide_pasted_signed.tsv",sep = "\t")
+
+#c
+
+# Cell Blueprints ####
+#Cell Blueprints LM22 for every module created from cemitools:
+enrichmentslist <- list()
+for (x in unique(cem_merged_RF@module$modules)){
+  print(x)
+  genesinput <- data.table(cem_merged_RF@module)[modules == x,]$genes
+  result <- blueprintenrichments(genes=genesinput)[[1]]
+  # result <- result[result$enrichment >= 0.1,]
+  enrichmentslist[[x]] <- result
+}
+
+enrichment_df <- data.table(bind_rows(enrichmentslist, .id = "column_label")) %>% pivot_wider(names_from = celltype, values_from = enrichment) %>% as.data.table() %>% as.matrix(., rownames="column_label")
+
+htmp2 <- Heatmap(enrichment_df[df_nes_split$modules,], 
+                name="Z-score",
+                heatmap_legend_param = list(
+                  legend_direction = "horizontal",
+                  legend_width = unit(6, "cm")),
+                # height = unit(10, "cm"),
+                # # row_km = 1,
+                # # row_km_repeats = 10,
+                # row_names_side = "left",
+                # width = unit(14, "cm"),
+                # column_names_rot = 90, 
+                # row_split = df_nes_split[#rownames(nes_matrix),
+                #   "ind"],
+                # cluster_rows = F,
+                # # column_names_max_height = unit(2, "cm"),
+                # column_names_side = "bottom",
+                # column_names_gp = gpar(fontsize = 10),
+                # row_title = NULL
+                show_heatmap_legend = T,
+                #heatmap_legend_param = list(
+                # legend_direction = "horizontal", 
+                #legend_width = unit(6, "cm")),
+                height = unit(10, "cm"),
+                cluster_rows = F,
+                clustering_distance_columns = "manhattan",
+                row_names_side = "left",
+                width = unit(14, "cm"),
+                column_names_rot = 90, 
+                border="grey70",
+                row_split = df_nes_split[#rownames(nes_matrix),
+                  "ind"],
+                rect_gp = gpar(col = "grey70"),
+                # column_names_max_height = unit(2, "cm"),
+                #column_title = "GO term catchphrase",
+                column_title = element_blank(),
+                column_title_gp = gpar(fontsize=12),
+                column_title_side = "bottom",
+                column_names_side = "bottom",
+                column_names_gp = gpar(fontsize = 10),
+                row_title = NULL
+)
+draw(htmp2, heatmap_legend_side="right")
+CelltypeEnrichment_grob <- grid.grabExpr(draw(htmp2, heatmap_legend_side="top"))#, heatmap_legend_side="top"))
+
+
+fig3_plot_width=20
+fig3_plot_height=7
+fig3_plotname <- "output/supplement_figure3_heatmaps"
+
+
+figure3_supplement <- ggarrange(ncol = 2, nrow=1, align = "hv",
+                                GOcatchterm_grob,
+                                CelltypeEnrichment_grob,
+                                labels= c("a)","b)"),
+                                label.y = .97,
+                                font.label = list(size = 24, color = "black", face = "bold", family = NULL))
+ggsave(figure3_supplement, filename = paste0(fig3_plotname, ".pdf"),device = "pdf",width = fig3_plot_width-6.6, height = fig3_plot_height,bg="white")
+ggsave(figure3_supplement, filename = paste0(fig3_plotname, ".png"),device = "png",width = fig3_plot_width-6.6, height = fig3_plot_height,bg="white")
+ggsave(figure3_supplement, filename = paste0(fig3_plotname, ".svg"),device = "svg",width = fig3_plot_width-6.6, height = fig3_plot_height,bg="white")
+
+
+##### Cibersort: rawcounts: run all samples of a cohort in one run for the batch effect correction to apply correctly #####
+
+cibersortx_results_fractions_psc_cohort <- fread("../00_RawData/cibersort_results/psc_cohort_fractions_only/CIBERSORTx_Job32_Adjusted.txt")
+cibersortx_results_fractions_psc_cohort$Cohort <- 0
+cibersortx_results_fractions_psc_cohort[,Diagnose:=case_when(Mixture %in% merged_metadata[Diagnose=="PSCUC",SampleID] ~ "PSCUC",
+                                                             Mixture %in% merged_metadata[Diagnose=="PSC",SampleID] ~ "PSC",
+                                                             Mixture %in% merged_metadata[Diagnose=="Control",SampleID] ~ "Control")]
+cibersortx_results_fractions_uc_cohort <- fread("../00_RawData/cibersort_results/uc_cohort_fractions_only/CIBERSORTx_Job33_Adjusted.txt")
+cibersortx_results_fractions_uc_cohort$Cohort <- 1
+cibersortx_results_fractions_uc_cohort[,Diagnose:=case_when(Mixture %in% merged_metadata[Diagnose=="UC",SampleID] ~ "UC",
+                                                            Mixture %in% merged_metadata[Diagnose=="Control",SampleID] ~ "Control")]
+cibersortx_results_cell_fractions_DT<-rbindlist(list(cibersortx_results_fractions_psc_cohort,cibersortx_results_fractions_uc_cohort))
+
+cibersortx_results_cell_fractions_DT_long <- pivot_longer(cibersortx_results_cell_fractions_DT, cols = 2:23, values_to = "cell_fraction", names_to = "cell_type") %>% as.data.table()
+cibersortx_results_cell_fractions_DT_long$Cohort <- cibersortx_results_cell_fractions_DT_long$Cohort %>% factor()
+cibersortx_results_cell_fractions_DT_long[,CohortDiagnose:=factor(paste0(Cohort,Diagnose))]
+
+# plotting
+gg_cibersort_cell_fractions_PSC <- ggplot(data = cibersortx_results_cell_fractions_DT_long[Cohort==0],
+                                          mapping = aes(x=Diagnose,y=cell_fraction,fill=Diagnose)) +
+  geom_boxplot(position = position_dodge(0.8),coef=5) +
+  scale_fill_manual(values = c("Control"="white","PSC"="#66C2A5","PSCUC"="#A6D854"))+
+  theme_minimal()+
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank() ,legend.position=c(0.9,0.6), legend.text=element_text(size=12),
+        strip.text = element_blank(),
+        panel.grid.major.x = element_blank(),panel.grid.minor.x = element_blank(),
+        plot.margin = margin(0,0,0,0,"cm")) +
+  stat_compare_means(comparisons = list(c("Control","PSC"),c("Control","PSCUC"),c("PSC","PSCUC")) ,label =  "p.signif", label.x = 1.5,  hide.ns = TRUE, method = "wilcox.test",
+                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns"),na=FALSE),
+                     step.increase = 0.05,tip.length = 0.01,vjust=0.65,size=3) +
+  facet_grid(cols = vars(cell_type),scales = "free_x",switch="x") +
+  labs(tag = "a") + ylab("cell fraction") + xlab("Diagnose")
+gg_cibersort_cell_fractions_UC <- ggplot(data = cibersortx_results_cell_fractions_DT_long[Cohort==1],
+                                         mapping = aes(x=Diagnose,y=cell_fraction,fill=Diagnose)) +
+  geom_boxplot(position = position_dodge(0.8),coef=5) +
+  scale_fill_manual(values = c("Control"="white","UC"="#8DA0CB"))+
+  theme_minimal()+
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank() ,legend.position=c(0.9,0.6), legend.text=element_text(size=12),
+        strip.text = element_text(angle = 90, hjust = 1, size=9,vjust = 0.5,margin = margin(0.1,0.5,0.0,0.5,"cm")),
+        panel.grid.major.x = element_blank(),panel.grid.minor.x = element_blank(),
+        plot.margin = margin(0,0,0,0,"cm")) +
+  stat_compare_means(comparisons = list(c("Control","UC")) ,label =  "p.signif", label.x = 1.5,  hide.ns = TRUE, method = "wilcox.test",
+                     step.increase = 0.05,tip.length = 0.01,vjust=0.65,size=3) +
+  facet_grid(cols = vars(cell_type),scales = "free_x",switch = "x") +
+  labs(tag = "b") + ylab("cell fraction") + xlab("Diagnose") 
+ggarrange(plotlist = list(gg_cibersort_cell_fractions_PSC,gg_cibersort_cell_fractions_UC),nrow=2,align="none",heights = c(0.4,0.6))
+svg(filename = "output/SupplementaryFigure6_cibersortx_fractions_by_cohort.svg",width = 8,height=8)
+ggarrange(plotlist = list(gg_cibersort_cell_fractions_PSC,gg_cibersort_cell_fractions_UC),nrow=2,align="none",heights = c(0.4,0.6))
+dev.off()
+# manually remove the "NS." string from the plots, since the statistical test sometimes gives NA due to all-zero vectors compared against each other 
+
 
 
 

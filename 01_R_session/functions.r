@@ -644,7 +644,7 @@ topGO_enrichment <- function(genelist = NULL,
       gene_background <- rownames(DESeq_result)
       overallBaseMean <- as.matrix(DESeq_result[, "baseMean", drop = F])
       rownames(overallBaseMean) <- rownames(DESeq_result)
-      sig_idx <- match(genelist, rownames(overallBaseMean))
+      sig_idx <- match(genelist, rownames(overallBaseMean))%>%.[!is.na(.)]
       
       backG <- c()
       
