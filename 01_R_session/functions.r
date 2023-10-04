@@ -497,8 +497,87 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL,seed=123){
   return(rf_model)
 }
 
+return_tuned_RF_model_tidymodels <-  function(training_df=NULL,outcome_col=NULL){
+  require(doParallel)
+  require(tidyverse)
+  require(tidymodels)
+  require(tune)
+  
+  #Registering all cores: 
+  all_cores <- parallel::detectCores(logical = FALSE)
+  
+  cl <- makePSOCKcluster(all_cores)
+  registerDoParallel(cl)
+  
+  # Models
+  
+  model_rf <- 
+    rand_forest(mtry = tune::tune(), trees = tune::tune(), min_n = tune::tune()) %>% 
+    set_engine("ranger", importance = "impurity") %>% 
+    set_mode("classification")
+  
+  # model_xgboost <- 
+  #   boost_tree(mtry = tune::tune(), trees = tune::tune(), min_n = tune::tune()) %>% 
+  #   set_engine("xgboost", importance = "impurity") %>% 
+  #   set_mode("classification")
+  
+  # Grid of hyperparameters
+  
+  grid_rf <- 
+    grid_max_entropy(
+      mtry(range = c(1, 20)), 
+      trees(range = c(500, 1000)),
+      min_n(range = c(2, 10)),
+      size = 30)
+  
+  # Formula
+  formula_rf <- paste0(outcome_col, " ~ .") %>% as.formula()
+  
+  # Workflow
+  
+  wkfl_rf <- 
+    workflow() %>% 
+    add_formula(formula_rf) %>%
+    add_model(model_rf)
+  
+  # wkfl_wgboost <-
+  #   workflow() %>%
+  #   add_formula(Diagnose ~ .) %>%
+  #   add_model(model_xgboost)
+  
+  # Cross validation method
+  
+  cv_folds <- vfold_cv(training_df, v = 5)
+  cv_folds
+  
+  # Choose metrics
+  
+  my_metrics <- metric_set(yardstick::roc_auc, yardstick::accuracy, yardstick::sens, yardstick::spec, yardstick::precision, yardstick::recall)
+  
+  # Tuning
+  
+  rf_fit <- tune::tune_grid(
+    wkfl_rf,
+    resamples = cv_folds,
+    grid = grid_rf,
+    metrics = my_metrics,
+    control = control_grid(verbose = TRUE) # don't save prediction (imho)
+  )
+  
+  # Fit best model 
+  
+  tuned_model <-
+    wkfl_rf %>% 
+    finalize_workflow(select_best(rf_fit, metric = "accuracy")) %>% 
+    fit(data = training_df)
+  
+  #unregister all cores
+  stopCluster(cl)
+  return(tuned_model)
+}
+
 #make sure outcome_col is a binary factor, there is no sanity test yet in place for this.
-performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome_column=NULL,seed=123){
+performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome_column=NULL,seed=123, mlmodel="caret"){
   require(rsample)
   require(pROC)
   require(InformationValue)
@@ -516,9 +595,11 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   Resultitem <- outcome_column
   
   
-  
-  tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
-  
+  if(mlmodel == "caret"){
+    tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
+  }else{
+    tuned_model <- return_tuned_RF_model_tidymodels(training_df=rftrain,outcome_col=Resultitem)
+  }
   ## tidymodels:
   # predicted_test <- predict(tuned_model, testing_dataset, type = "prob")
   #ranger:

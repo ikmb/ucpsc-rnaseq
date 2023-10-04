@@ -183,7 +183,6 @@ Mo_CON_UC_Diagnose_results <- performML(dataset = reduced_merged_RF[,-c("rn")], 
 pROC::auc(Mo_CON_UC_Diagnose_results$pROC_object)
 pROC::ci.auc(Mo_CON_UC_Diagnose_results$pROC_object)
 
-# ggplot(validation_z_con_stabilised,aes(x=colData(vsd_validation)$severity,y=ZFP36L2))+geom_boxplot()+geom_jitter(width=0.05)
 
 
 # Planell validation Preparation####
@@ -241,11 +240,6 @@ severityscale <- validation_ostrowskicohorts[[validation_ostrowski_cohortname]]
 dds_validation_ostrowski <- getCohortsDDS(cohortname=validation_ostrowski_cohortname)
 vsd_validation_ostrowski$severity <- vsd_validation_ostrowski$Diagnose
 vsd_validation_ostrowski$severity[is.na(vsd_validation_ostrowski$severity)] <- "Control"  
-
-# ggplot(as.data.table(t(assay(vsd_validation_ostrowski)[,])),aes(x=colData(vsd_validation_ostrowski)$severity,y=S100A6))+geom_boxplot()+geom_jitter(width=0.05)
-
-# res_validation_ostrowski <- results(dds_validation_ostrowski, c("Diagnose","Control","UC"),tidy=TRUE)
-# res_validation_ostrowski[res_validation_ostrowski$row %in% top25$feature,]
 
 validation_ostrowski_controls <- ifelse(dds_validation_ostrowski$Diagnose == "Control",TRUE,FALSE)
 validation_ostrowski_vst_counts <- data.table((assay(vsd_validation_ostrowski)[,]))
@@ -437,6 +431,21 @@ fwrite(res_UC_PSC, file="output/deseq_UC_PSC.csv")
 res_PSCUC_PSC <- results(dds,  contrast=c("Diagnose","PSCUC","PSC"),tidy=T)
 # resLFC_PSCUC_PSC <- lfcShrink(dds, coef="Diagnose_PSCUC_vs_PSC", type="apeglm")
 fwrite(res_PSCUC_PSC, file="output/deseq_PSCUC_PSC.csv")
+
+res_PSCUC_CON <- results(dds,  contrast=c("Diagnose","PSCUC","Control"),tidy=T)
+fwrite(res_PSCUC_CON  %>% arrange(padj), file="output/deseq_PSCUC_CON.csv")
+res_PSC_CON <- results(dds,  contrast=c("Diagnose","PSC","Control"),tidy=T)
+fwrite(res_PSC_CON %>% arrange(padj), file="output/deseq_PSC_CON.csv")
+
+
+
+#Overlap index between PSCUC and PSC, both against CON:
+intersect(res_PSC_CON[res_PSC_CON$padj < 0.01,"row"],
+          res_PSCUC_CON[res_PSCUC_CON$padj < 0.01,"row"]) %>%
+  length() / min(res_PSC_CON[res_PSC_CON$padj < 0.01,"row"] %>% length(),
+               res_PSCUC_CON[res_PSCUC_CON$padj < 0.01,"row"] %>% length())
+
+
 # Random Forest results:
 #Validations:
 Planell_CON_UC_Diagnose_results
@@ -968,12 +977,6 @@ plot_title="PSC alone + PSC/UC vs Control",
 setcolors = c("#D35A45", "#3B668B","#E0812E"))#brewer.pal(12, "Set3")[4:6])#c("red","gray", "black"))
 
 
-# rocs_a_b <- ggarrange(UC_CON_plot,PSC_CON_plot,labels = c("a)","b)"),label.y = .97,
-#                       font.label = list(size = 24, color = "black", face = "bold", family = NULL))
-# rocs_a_b
-
-
-
 #AUROC
 auroc_plot_PSCPSCUC_UC <- plot_pROC_rocs(proclist = list(PSC_PSCUC_Diagnose_results$pROC_object,
                                                          PSCUCPSC_UC_Diagnose_results$pROC_object), 
@@ -1009,10 +1012,8 @@ arranged_figure4 <- ggarrange(ncol = 1, nrow=2, align = "v",
 
 arranged_figure4
 
-# fig2_plot_width=16
-# fig2_plot_height=18
+
 fig2_plot_width=12
-# fig2_plot_height=18
 fig2_plot_height=12
 fig2_plotname <- "output/figure4"
 ggsave(arranged_figure4, filename = paste0(fig2_plotname, ".pdf"),device = "pdf",width = fig2_plot_width, height = fig2_plot_height)
@@ -1073,11 +1074,6 @@ DT_genesets_modules$model_category <- ifelse(grepl("DEG",DT_genesets_modules$mod
 gg_genesets_modules <- ggarrange(nrow=2,
   ggplot(data = DT_genesets_modules[model_category=="DEG"]) + 
     geom_col(mapping = aes(x=model_name,y=module_enrichment,fill=module_name),position=position_dodge2()) + 
-    #     geom_label_repel(mapping = aes(
-    #   x=model_name,y=module_enrichment  ,label=module_annotation,group=module_name),position = position_dodge(0.9),
-    #   min.segment.length = 0.1,   size = 5, hjust = 1 #direction = c("both")#label.size = 5.5,
-    #   #nudge_y = 1
-    # ) +
     geom_label_repel(mapping = aes(
       x=model_name,y=module_enrichment  ,label=module_annotation,group=module_name),position = position_dodge(0.9),
       min.segment.length = 0.1,   size = 5,direction = 'x', ylim = c(30, 60) #direction = c("both")#label.size = 5.5,
@@ -1249,169 +1245,6 @@ dev.off()
 
 
 # GRAPHICAL ABSTRACT ####
-
-# #ggarrange(ncol=1, nrow=2,
-# graph_abstract_figure <- ggarrange(ncol = 2, nrow=2,
-#           EnhancedVolcano::EnhancedVolcano(res_PSCandPSCUC_CON_untidy,
-#                                            title=element_blank(),
-#                                            subtitle="PSC+PSC/UC vs CON",
-#                                            caption="",
-#                                            selectLab = c(""),
-#                                            lab = paste0("italic('", rownames(res_PSCandPSCUC_CON_untidy), "')"),
-#                                            x = 'log2FoldChange',
-#                                            y = 'padj',
-#                                            xlim = c(min(res[['log2FoldChange']], na.rm = TRUE) - 0.1, max(res[['log2FoldChange']], na.rm = TRUE) +
-#                                                       0.1),
-#                                            ylab = bquote(~- ~ Log[10] ~ italic(P- Adjusted)),
-#                                            #                  selectLab = selectLab_italics,
-#                                            xlab = bquote(~Log[2]~ 'fold change'),
-#                                            max.overlaps = 30,
-#                                            pCutoff = 1e-02,
-#                                            #                  FCcutoff = 1.0,
-#                                            pointSize = 3.0,
-#                                            labSize = 3,
-#                                            labCol = 'black',
-#                                            labFace = 'bold',
-#                                            legendLabels = c("NS", expression(Log[2] ~ FC), "p - Adjusted", expression(p - ~ Adjusted ~ and
-#                                                                                                                       ~ log[2] ~ FC)), #c("NS", expression(Log[2] ~ FC), "p-value", paste0("P-Adjusted and ",expression(Log[2] ~ FC))),#expression(p - value ~ and ~ log[2] ~ FC)),
-#                                            boxedLabels = FALSE,
-#                                            parseLabels = TRUE,
-#                                            col = c('black', 'pink', 'purple', 'red3'),
-#                                            colAlpha = 4/5,
-#                                            legendPosition = 'right',
-#                                            legendLabSize = 14,
-#                                            legendIconSize = 4.0,
-#                                            drawConnectors = FALSE,
-#                                            widthConnectors = .50,
-#                                            lengthConnectors = unit(0.01, "npc"),
-#                                            colConnectors = 'black') +
-#             coord_flip() +theme_linedraw()+
-#             theme(plot.title = element_text(hjust = 0.0),
-#                   legend.position= "none",
-#                   plot.margin = margin(5.5,20,5.5,27, "pt"),
-#                   #axis.title.x = element_blank(),        
-#                   legend.title = element_blank(),
-#                   plot.tag.position = c(-.01, .97),
-#                   #plot.tag = element_text(size = rel(1.5 * size.rel)),
-#                   legend.text=element_text(size=rel(1.5 * size.rel)),
-#                   axis.text = element_text(size=unit(17,"points")),
-#                   axis.title = element_text(size=unit(17,"points")),
-#                   plot.tag =element_text(size=unit(22,"points")),
-#                   plot.subtitle = element_text(size=unit(22,"points"))
-#                   #axis.title.y = element_blank()),
-#             ),
-#                                       EnhancedVolcano::EnhancedVolcano(res_PSCUC_PSC_untidy[!(rownames(res_PSCUC_PSC_untidy) %in% "MAN2A1"),],
-#                                                                        title=element_blank(),
-#                                                                        subtitle="PSC/UC vs PSC alone",
-#                                                                        caption="",
-#                                                                        selectLab = c(""),
-#                                                                        lab = paste0("italic('", rownames(res_PSCUC_PSC_untidy[!(rownames(res_PSCUC_PSC_untidy) %in% "MAN2A1"),]), "')"),
-#                                                                        x = 'log2FoldChange',
-#                                                                        y = 'padj',
-#                                                                        xlim = c(min(res[['log2FoldChange']], na.rm = TRUE) - 0.1, max(res[['log2FoldChange']], na.rm = TRUE) +
-#                                                                                   0.1),
-#                                                                        ylab = bquote(~- ~ Log[10] ~ italic(P- Adjusted)),
-#                                                                        #                  selectLab = selectLab_italics,
-#                                                                        xlab = bquote(~Log[2]~ 'fold change'),
-#                                                                        max.overlaps = 30,
-#                                                                        pCutoff = 1e-02,
-#                                                                        #                  FCcutoff = 1.0,
-#                                                                        pointSize = 3.0,
-#                                                                        labSize = 3,
-#                                                                        labCol = 'black',
-#                                                                        labFace = 'bold',
-#                                                                        legendLabels = c("NS", expression(Log[2] ~ FC), "p - Adjusted", expression(p - ~ Adjusted ~ and
-#                                                                                                                                                   ~ log[2] ~ FC)), #c("NS", expression(Log[2] ~ FC), "p-value", paste0("P-Adjusted and ",expression(Log[2] ~ FC))),#expression(p - value ~ and ~ log[2] ~ FC)),
-#                                                                        boxedLabels = FALSE,
-#                                                                        parseLabels = TRUE,
-#                                                                        col = c('black', 'pink', 'purple', 'red3'),
-#                                                                        colAlpha = 4/5,
-#                                                                        legendPosition = 'right',
-#                                                                        legendLabSize = 14,
-#                                                                        legendIconSize = 4.0,
-#                                                                        drawConnectors = FALSE,
-#                                                                        widthConnectors = .50,
-#                                                                        lengthConnectors = unit(0.01, "npc"),
-#                                                                        colConnectors = 'black') +
-#                                                                         coord_flip() +
-#                                                                         theme_linedraw()+
-#                                                                         theme(plot.title = element_text(hjust = 0.0),
-#                                                                               legend.position= "none",
-#                                                                               plot.margin = margin(5.5,20,5.5,27, "pt"),
-#                                                                               #axis.title.x = element_blank(),        
-#                                                                               legend.title = element_blank(),
-#                                                                               plot.tag.position = c(-.01, .97),
-#                                                                               #plot.tag = element_text(size = rel(1.5 * size.rel)),
-#                                                                               legend.text=element_text(size=rel(1.5 * size.rel)),
-#                                                                               axis.text = element_text(size=unit(17,"points")),
-#                                                                               axis.title = element_text(size=unit(17,"points")),
-#                                                                               plot.tag =element_text(size=unit(22,"points")),
-#                                                                               plot.subtitle = element_text(size=unit(22,"points"))
-#                                                                               #axis.title.y = element_blank()),
-#                                                                         ),
-#                               plot_pROC_rocs(
-#                                 proclist = list(PSC_CONTROL_Diagnose_results$pROC_object
-#                                                                #PSCUC_CON_Diagnose_results$pROC_object,
-#                                                                #PSCUCPSC_CON_Diagnose_results$pROC_object
-#                                 ), 
-#                                 procnames = c("PSC vs Control"
-#                                               #"PSC/UC vs Control",
-#                                               #"(ii)  PSC + PSC/UC vs Control"
-#                                               ),
-#                                 plot_tag = element_blank(), 
-#                                 plot_title="PSC alone + PSC/UC \nvs Control",
-#                                 setcolors = c("#D35A45", "#3B668B","#E0812E")
-#                               )+
-#                                 theme(plot.title = element_text(hjust = 0.0,
-#                                                                                     size=unit(22,"points")),
-#                                                           #legend.position= "none",
-#                                                           plot.margin = margin(5.5,20,5.5,27, "pt"),
-#                                                           #axis.title.x = element_blank(),        
-#                                                           #legend.title = element_blank(),
-#                                                           plot.tag.position = c(-.01, .97),
-#                                                           #plot.tag = element_text(size = rel(1.5 * size.rel)),
-#                                                           legend.text=element_text(size=rel(1.5 * size.rel)),
-#                                                           axis.text = element_text(size=unit(17,"points")),
-#                                                           axis.title = element_text(size=unit(17,"points")),
-#                                                           plot.tag =element_text(size=unit(22,"points")),
-#                                                           plot.subtitle = element_text(size=unit(22,"points"))
-#                                                           #axis.title.y = element_blank()),
-#                                                   ),
-#                           plot_pROC_rocs(
-#                                          proclist = list(PSC_PSCUC_Diagnose_results$pROC_object
-#                                                          #PSCUCPSC_UC_Diagnose_results$pROC_object
-#                                                          ), 
-#                                          procnames = c("(iv) PSC vs PSC/UC"
-#                                                        #"(iii) PSC+PSC/UC vs UC"
-#                                                        ),
-#                                          plot_tag = element_blank(), 
-#                                          plot_title="PSC alone vs \nPSC/UC",
-#                                          setcolors = c("#5E912A","#D69FB3","#A6A6A6")
-#                                          #brewer.pal(12, "Set3")[7:9]#c("green","dimgray","black")
-#                           )+#theme(plot.title = element_text(size=unit(22,"points")))
-#             theme(plot.title = element_text(hjust = 0.0,
-#                                             size=unit(22,"points")),
-#                   #legend.position= "none",
-#                   plot.margin = margin(5.5,20,5.5,27, "pt"),
-#                   #axis.title.x = element_blank(),        
-#                   #legend.title = element_blank(),
-#                   plot.tag.position = c(-.01, .97),
-#                   #plot.tag = element_text(size = rel(1.5 * size.rel)),
-#                   legend.text=element_text(size=rel(1.5 * size.rel)),
-#                   axis.text = element_text(size=unit(17,"points")),
-#                   axis.title = element_text(size=unit(17,"points")),
-#                   plot.tag =element_text(size=unit(22,"points")),
-#                   plot.subtitle = element_text(size=unit(22,"points"))
-#                   #axis.title.y = element_blank()),
-#             )
-#           
-#           )
-# 
-# 
-# 
-# ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".svg"),device = "svg",width = 9, height = 9,bg="white")
-# ggsave(graph_abstract_figure, filename = paste0("output/graphical_abstract_figure", ".pdf"),device = "pdf",width = 9, height = 9,bg="white")
-
 
 graph_abstract_figure2 <- ggarrange(ncol = 2, nrow=2,
                                    EnhancedVolcano::EnhancedVolcano(res_PSCandPSCUC_CON_untidy,

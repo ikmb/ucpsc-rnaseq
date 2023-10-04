@@ -109,6 +109,7 @@ zscore_matrix <- t(as.matrix(merged_RF[Diagnose %in% c(1,2),-c("rn","Diagnose","
 colnames(zscore_matrix) <- merged_RF[Diagnose %in% c(1,2),]$rn
 rownames(zscore_matrix) <- colnames(merged_RF[,-c("rn","Diagnose","Cohort")])  
 
+#limit PCA only to PSC and PSCUC patients
 zs_PCA <- pca(zscore_matrix, metadata = colData(vsd)[colData(vsd)$Diagnose %in% c("PSC","PSCUC"),], removeVar = 0.1)
 
 pca_timesincediagnose_plot <- biplot(zs_PCA, 
