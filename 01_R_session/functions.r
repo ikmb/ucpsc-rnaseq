@@ -500,7 +500,7 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL,seed=123){
 #glmnet ml method:
 return_tuned_glmnet_model <- function(training_df=NULL,outcome_col=NULL,seed=123){
   
-  require(ranger)
+  require(glmnet)
   require(caret)
   
   ctrl <- trainControl(method = "cv", number = 5, classProbs = TRUE#, classProbs = TRUE
