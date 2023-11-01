@@ -474,8 +474,8 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL,seed=123){
   )
   
   hyper_params <- expand.grid(
-    mtry = c(10:15),    # Number of variables randomly sampled at each split
-    min.node.size = c(8:10),  # Minimum node size (terminal nodes)
+    mtry = c(1:20),    # Number of variables randomly sampled at each split
+    min.node.size = c(2:10),  # Minimum node size (terminal nodes)
     splitrule=c("gini" #,"extratrees"
     )
   )
