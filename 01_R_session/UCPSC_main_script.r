@@ -136,6 +136,7 @@ levels(merged_RF$Diagnose) <- c("0","1","2", "3")
 merged_RF$Cohort  <- factor(merged_RF$Cohort )
 
 filtered_merged_RF <- merged_RF[merged_RF$Cohort == 1,]
+save(filtered_merged_RF, file="filtered_merged_RF.Rdata")
 levels(filtered_merged_RF$Diagnose) <- droplevels(factor(filtered_merged_RF$Diagnose))
 #0 = Control, 1= UC
 levels(filtered_merged_RF$Diagnose) <- c("0", "1")#0 = Control, 1= UC
@@ -143,6 +144,13 @@ levels(filtered_merged_RF$Diagnose) <- c("0", "1")#0 = Control, 1= UC
 CON_UC_Diagnose_results <- performML(dataset = filtered_merged_RF[,-c("Cohort","rn")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
 
 pROC::auc(CON_UC_Diagnose_results$pROC_object)
+
+
+
+# #glmnet performance:
+# pROC::auc(performML(dataset = filtered_merged_RF[,-c("Cohort","rn")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr, mlmethod="glmnet")$pROC_object)
+# pROC::ci.auc(performML(dataset = filtered_merged_RF[,-c("Cohort","rn")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr, mlmethod="glmnet")$pROC_object)
+
 
 # Mo Validation Preparation####
 validation_cohortname<- "Mo_UC"
@@ -174,15 +182,25 @@ Mo_genefeatures <- c("rn",rownames(assay(vsd_validation)))
 Mo_dataset <- data.table(validation_z_con_stabilised, Diagnose=vsd_validation$Diagnose)
 
 
-reduced_merged_RF <- filtered_merged_RF[,intersect(colnames(Mo_dataset), colnames(filtered_merged_RF)),with=F]
+reduced_merged_RF_formo <- filtered_merged_RF[,intersect(colnames(Mo_dataset), colnames(filtered_merged_RF)),with=F]
 reduced_Mo_RF <- Mo_dataset[,intersect(colnames(Mo_dataset), colnames(filtered_merged_RF)),with=F]
 
 
-Mo_CON_UC_Diagnose_results <- performML(dataset = reduced_merged_RF[,-c("rn")], testing_dataset = reduced_Mo_RF,  splitfactor = 0.5, outcome_column = "Diagnose", seed = seednr)
+Mo_CON_UC_Diagnose_results <- performML(dataset = reduced_merged_RF_formo[,-c("rn")], testing_dataset = reduced_Mo_RF,  splitfactor = 0.5, outcome_column = "Diagnose", seed = seednr)
 
 pROC::auc(Mo_CON_UC_Diagnose_results$pROC_object)
 pROC::ci.auc(Mo_CON_UC_Diagnose_results$pROC_object)
 
+
+# #glmnet performance:
+# pROC::auc(performML(dataset = reduced_merged_RF_formo[,-c("rn")], testing_dataset = reduced_Mo_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr, mlmethod="glmnet")$pROC_object)
+# pROC::ci.auc(performML(dataset = reduced_merged_RF_formo[,-c("rn")], testing_dataset = reduced_Mo_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr, mlmethod="glmnet")$pROC_object)
+# # perforamnce on our dataset:
+# performML(dataset = reduced_merged_RF_formo[,-c("rn")], testing_dataset = reduced_Mo_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr, mlmethod="glmnet") %>% 
+#   pluck("tuned_model") %>%
+#   predictwithatunedmodel(tuned_model = ., testing_dataset = Mo_CON_UC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr) %>% 
+#   pluck("pROC_object") %>%
+#   pROC::auc(.)
 
 
 # Planell validation Preparation####
@@ -227,6 +245,13 @@ pROC::auc(reducedforplanell_CON_UC_Diagnose_results$pROC_object)
 
 
 
+# #glmnet performance:
+# pROC::auc(performML(dataset = reduced2_merged_RF[,-c("rn")],testing_dataset = reduced2_Planell_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr,mlmethod="glmnet")$pROC_object)
+# pROC::ci.auc(performML(dataset = reduced2_merged_RF[,-c("rn")],testing_dataset = reduced2_Planell_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr,mlmethod="glmnet")$pROC_object)
+# 
+# 
+
+
 # Ostrowski UC validation Preparation####
 validation_ostrowski_cohortname<- "Ostrowski"
 validation_ostrowskicohorts <- list(Ostrowski ="UCAI Based\nDisease Severity",
@@ -269,6 +294,24 @@ pROC::auc(Ostrowski_CON_UC_Diagnose_results$pROC_object)
 #validation with own test dataset
 pROC::auc(reducedforOstrowski_CON_UC_Diagnose_results$pROC_object)
 
+
+
+
+
+# #glmnet performance:
+# pROC::auc(performML(dataset = reduced3_merged_RF[,-c("rn")],testing_dataset = reduced3_Ostrowski_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr,mlmethod="glmnet")$pROC_object)
+# pROC::ci.auc(performML(dataset = reduced3_merged_RF[,-c("rn")],testing_dataset = reduced3_Ostrowski_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr,mlmethod="glmnet")$pROC_object)
+# 
+# performML(dataset = reduced3_merged_RF[,-c("rn")],testing_dataset = reduced3_Ostrowski_RF,  splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr,mlmethod="glmnet") %>% 
+#   pluck("tuned_model") %>%
+#   predictwithatunedmodel(tuned_model = ., testing_dataset = Ostrowski_CON_UC_Diagnose_results$test_df, outcome_column = "Diagnose",seed = seednr) %>% 
+#   pluck("pROC_object") %>%
+#   pROC::auc(.)
+
+
+
+
+
 # PSC vs UC model, no controls, no PSCUC ####
 
 PSC_UC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 2,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
@@ -276,6 +319,11 @@ PSC_UC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 0
 pROC::auc(PSC_UC_Diagnose_results$pROC_object)
 
 ggplot(merged_RF[,-c("rn","Cohort")])+geom_jitter(aes(x=Diagnose,y=ACLY))+geom_boxplot(aes(x=Diagnose,y=ACLY))#+facet_wrap(~merged_metadata$Cohort)
+
+PSC_UC_Diagnose_results <- performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 2,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr)
+#glmnet performance:
+pROC::auc(performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 2,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr,mlmethod="glmnet")$pROC_object)
+pROC::ci.auc(performML(dataset = merged_RF[merged_RF$Diagnose != 0 & merged_RF$Diagnose != 2,-c("rn","Cohort")], splitfactor = 0.5, outcome_column = "Diagnose",seed = seednr,mlmethod="glmnet")$pROC_object)
 
 
 # PSC vs Controls model, no UC, no PSCUC ####

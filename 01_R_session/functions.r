@@ -497,6 +497,37 @@ return_tuned_RF_model <- function(training_df=NULL,outcome_col=NULL,seed=123){
   return(rf_model)
 }
 
+#glmnet ml method:
+return_tuned_glmnet_model <- function(training_df=NULL,outcome_col=NULL,seed=123){
+  
+  require(ranger)
+  require(caret)
+  
+  ctrl <- trainControl(method = "cv", number = 5, classProbs = TRUE#, classProbs = TRUE
+  )
+  
+  hyper_params <- expand.grid(
+    .alpha=1,
+    .lambda=seq(0, 100, by = 0.1)
+  )
+  
+  # Formula
+  formula_rf <- paste0(outcome_col, " ~ .") %>% as.formula()
+  
+  # Create a random forest model with hyperparameter tuning
+  set.seed(seed)
+  set.seed(seed)
+  rf_model <- train(
+    formula_rf,            # Replace with your target variable and predictors
+    data = training_df,
+    method = "glmnet",
+    trControl = ctrl,
+    tuneGrid = hyper_params
+  )
+  return(rf_model)
+}
+
+
 return_tuned_RF_model_tidymodels <-  function(training_df=NULL,outcome_col=NULL){
   require(doParallel)
   require(tidyverse)
@@ -577,7 +608,7 @@ return_tuned_RF_model_tidymodels <-  function(training_df=NULL,outcome_col=NULL)
 }
 
 #make sure outcome_col is a binary factor, there is no sanity test yet in place for this.
-performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome_column=NULL,seed=123, mlmodel="caret"){
+performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome_column=NULL,seed=123, mlframework="caret",mlmethod="rf"){
   require(rsample)
   require(pROC)
   require(InformationValue)
@@ -595,8 +626,14 @@ performML <- function(dataset=NULL,testing_dataset=NULL,splitfactor=NULL,outcome
   Resultitem <- outcome_column
   
   
-  if(mlmodel == "caret"){
-    tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
+  if(mlframework == "caret"){
+    if(mlmethod=="rf"){
+      tuned_model <- return_tuned_RF_model(training_df=rftrain,outcome_col=Resultitem)
+    }else if(mlmethod=="glmnet"){
+      tuned_model <- return_tuned_glmnet_model(training_df=rftrain,outcome_col=Resultitem)
+    }else{
+      stop("viable mlmethods are rf and glmnet")
+    }
   }else{
     tuned_model <- return_tuned_RF_model_tidymodels(training_df=rftrain,outcome_col=Resultitem)
   }
