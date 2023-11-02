@@ -1,3 +1,8 @@
+## Author: Florian Uellendahl-Werth & Eike Matthias Wacker
+##
+## IKMB Kiel, 2023
+## Email: e.wacker at ikmb.uni-kiel.de
+
 library(data.table)
 library(plyr)
 library(tidyverse)
